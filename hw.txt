@@ -1,0 +1,27 @@
+BIL353- ARTIFICIAL INTELLIGENCE TERM PROJECT
+
+
+· A multi-agent environment where agents compete to collect food on 50x50 cell matrix. Green and red foods are randomly and equally placed, and counts are no more than 30% of board cell count (given initially).
+
+· Goal: The agents must learn to collect as many as green food possible while avoiding red food.
+
+· Agents: The environment contains 3 agents, each was positioned randomly on the board, and they are only aware of the position of nearest agent (Manhattan or Euclidean Distance randomly). Foods are observable by agents.
+
+· Agent Reward Function (independent):
+
+o +1 for interaction with green food
+
+o -1 for interaction with red food
+
+· Behavior Parameters:
+
+o Vector Observation space: velocity of agents selected randomly between 1 and 3 cells
+
+o Vector Action space: (Discrete) 4 Branches:
+
+§ Forward Motion (5 possible actions: Up, Down, Left, Right, No Action)
+
+o Rule: If two agents compete for green food cell, then left move wins
+
+
+Project has 80 points for successfully completed. 20 points left will be given for clever behavior algorithms designed for agents (e.g. find food patterns if an assumption exist, they are placed with a rule).
