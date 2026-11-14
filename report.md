@@ -1,368 +1,707 @@
-# BIL353 Yapay Zekâ Dönem Projesi Raporu
+# BIL353 projesi: sıfırdan kodu anlayarak ilerleme
 
-## Bu raporun amacı
+Bu rapor, projeyi daha önce yapay zekâ veya web programlama görmemiş birinin okuyabileceği sırayla açıklar. Her bölümde üç soruya cevap arıyoruz: **Kavram nedir? Projede neden gerekiyor? Kodda nasıl yaptık?** Çalıştırma komutları için `README.md` dosyasını kullanın.
 
-Bu belge, proje klasöründeki hw.txt ödevini nasıl yorumladığımızı ve Python uygulamasında nasıl gerçekleştirdiğimizi baştan sona açıklar. Amaç yalnızca kodu çalıştırmak değil; tahtanın nasıl oluştuğunu, ajanların ne gözlemlediğini, kararları hangi algoritmalarla verdiğini, nasıl öğrendiğini ve sonuçları nasıl değerlendirdiğimizi kendi cümlelerinizle anlatabilmenizi sağlamaktır.
+## 1. Önce yaptığımız işi anlayalım
 
-Ödevin ana hedefi şudur: 50 × 50 hücreli bir tahtada üç ajan yeşil yiyecekleri toplamaya çalışırken kırmızı yiyeceklerden kaçınır. Ajanlar hareket eder, yiyecekleri gözler ve başka bir ajanla aynı yiyeceğe yönelirse rekabet eder. Biz bu ortamı Python ile kurduk; dört karar/yol bulma yöntemini kıyasladık ve her yöntemin deneyiminden öğrenmesini sağlayan bir Q-öğrenme tablosu ekledik.
+Bir oyun tahtası düşünün. Tahtada üç oyuncu, toplanabilecek yeşil yiyecekler ve kaçınılacak kırmızı yiyecekler var. Oyuncuların her birine **ajan** diyoruz. Ajan, çevresinden bilgi alıp bir hareket seçen yazılım parçasıdır.
 
-## 1. Ödev metnini nasıl yorumladık?
+Bizim görevimiz oyuncuları elle yönetmek değil. Her ajanın hareket seçmesini, sonucunda ödül almasını ve bu deneyimle sonraki hareketlerini değiştirmesini sağlıyoruz. Buna **pekiştirmeli öğrenme** denir: önceden doğru hareket listesini vermek yerine, davranışın sonucunu ödülle bildiririz.
 
-Ödev metnindeki kuralların uygulamadaki karşılığı:
+Projede tek öğrenme yöntemi, tablo tabanlı **Q-learning** kullanılır. Bir sinir ağı veya dil modeli eğitmiyoruz. Temel ortam Python ile çalışır; HTML sayfası ortamı gösterir ve kontrol eder.
 
-| Ödev şartı | Uygulamadaki karşılığı |
+### Ödev şartları nerede karşılanıyor?
+
+| İstenen | Bizim uygulamamız | Kodun yeri |
+|---|---|---|
+| 50 × 50 tahta | Koordinatlar 0–49; toplam 2.500 hücre | `simulation.py`: `BOARD_SIZE` |
+| Yeşil ve kırmızı eşit, rastgele ve toplam en çok %30 | Her renkten en çok 375; tekrar etmeyen rastgele hücreler | `MAX_FOOD_PAIRS`, `Simulation.new_episode()` |
+| Üç ajan | Farklı başlangıç hücrelerinde üç `Agent` | `Simulation.new_episode()` |
+| Yalnızca en yakın rakibin konumu | Gözlemde tek rakip koordinatı | `Simulation.observation_for()` |
+| Manhattan veya Öklid rastgele | Bölüm başında bir ölçü seçilir | `new_episode()`, `observation_for()` |
+| Yiyecekler gözlemlenebilir | Bütün yeşil ve kırmızı koordinatlar gözleme verilir | `Observation` |
+| Hız rastgele 1–3 hücre | Her ajana bölüm başında hız atanır | `new_episode()` |
+| Yukarı, aşağı, sol, sağ, eylemsiz | Beş ayrık seçenek | `ACTIONS`, `DELTAS`, `move()` |
+| Yeşil +1, kırmızı −1; bağımsız ödül | Yalnızca yiyeceği alan ajanın sayacı ve Q değeri güncellenir | `Agent.reward`, `move()`, `LearningMemory.learn()` |
+| Yeşil için rekabette sol kazanır | Aynı hücreye aynı mikro-adımda gelenler arasında `Left` önceliklidir | `move()` |
+
+Ödev öğrenmenin hangi algoritmayla yapılacağını zorunlu kılmıyor. Az kodla gerçek ödül güncellemesi yapabildiğimiz için Q-learning seçtik. Ödevdeki ek 20 puanlık yaratıcı davranış bölümü için ayrıca bir örüntü bulucu veya yeni algoritma eklemedik. Bu sürüm temel kuralları karşılamaya odaklanır; puan garantisi vermez.
+
+## 2. Dosyaları ve görevlerini ayıralım
+
+| Dosya | Görevi |
 |---|---|
-| 50 × 50 hücreli matris | Tahtanın genişliği ve yüksekliği 50. Koordinatlar 0–49 aralığında. |
-| Yeşil ve kırmızı yiyecekler rastgele ve eşit sayıda | Her bölüm başında hücreler rastgele örneklenir. Önce yeşil, sonra aynı sayıda kırmızı ve ardından üç ajan için farklı başlangıç hücreleri seçilir. |
-| Yiyecekler toplamda tahtanın en fazla %30’unu kaplar | 50 × 50 = 2.500 hücre. Bunun %30’u 750 hücredir. Renkler eşit sayıda olduğundan en çok 375 yeşil ve 375 kırmızı yiyecek bulunabilir. |
-| Üç ajan rastgele yerleştirilir | Her yeni bölümde üç başlangıç hücresi yiyeceklerden ayrı ve rastgele seçilir. |
-| Ajan yalnızca en yakın diğer ajanı bilir | Ajanın gözlemine kendi konumu/hızı, bütün yiyeceklerin konumları ve en yakın rakibin konumu girer. Diğer rakip gözlemde yer almaz. |
-| En yakın ajan Manhattan veya Öklid uzaklığıyla belirlenir | Her bölümün başında bu iki ölçüden biri rastgele seçilir. Seçilen ölçü, hangi rakibin en yakın olduğunu belirler. |
-| Hız 1–3 hücre arasında rastgele seçilir | Her ajana bölüm başında 1, 2 veya 3 hücre/tur hızı atanır. |
-| Yukarı, aşağı, sol, sağ veya hareket etme | Beş ayrık eylem uygulanır. Ödev “4 branches” dese de aynı maddede beş eylemi açıkça listeler; bu nedenle listelenen beş hareketi esas aldık. |
-| Yeşil yiyecek +1, kırmızı yiyecek −1 | Yiyeceğe ilk ulaşan ajan ilgili ödülü alır. Ödül ajan başına tutulur. |
-| Aynı yeşil hücreye rekabette sola hareket eden kazanır | Aynı hücreye aynı anda gidenler arasından “Left” eylemini seçen öncelik kazanır. Birden fazla eşit aday varsa veya hiç kimse sola gitmiyorsa düşük ajan numarasıyla eşitliği bozuyoruz; ödev bu ek eşitlik durumunu açıklamadığı için sonuç tekrarlanabilir olsun diye bu kuralı ekledik. |
+| `simulation.py` | Ajanlar, tahta, gözlem, hareket, ödül, öğrenme ve JSON belleği |
+| `app.py` | Yerel web sunucusu; HTML ile simülasyon arasındaki iletişim |
+| `index.html` | Tahtayı çizme, düğmeler, ayarlar, öğrenme ve bölüm sonuçları |
+| `hw.txt` | Verilen özgün ödev metni |
+| `README.md` | Kurulum ve çalıştırma kılavuzu |
+| `report.md` | Şu anda okuduğunuz açıklama |
+| `learning_memory.json` | Çalıştırınca oluşan öğrenme verisi |
 
-Bir bölüm varsayılan olarak her renkten 125 yiyecekle başlar. Bu sayı parametreyle değiştirilebilir; üst sınır her renkten 375’tir. Örneğin 40 yiyecek çifti demek tahtada 40 yeşil ve 40 kırmızı yiyecek olması demektir.
+Python, oyunun gerçek durumunu tutar. HTML üzerindeki bir daireyi çizmek o ajanı hareket ettirmez; önce Python konumu değiştirir, sonra HTML yeni koordinatı ekranda gösterir. Böylece oyun kuralları tek yerde bulunur.
 
-## 2. Projeyi sıfırdan nasıl kurduk?
+## 3. Kodu okumak için gerekli küçük sözlük
 
-### Adım 1: Ortamı ve kapsamı seçtik
+- **Değişken:** Bir değere verdiğimiz isim. `BOARD_SIZE = 50`, tahta boyutunu bir isim altında tutar.
+- **Fonksiyon:** Bir işi yapan kod grubu. `manhattan(a, b)`, iki konumu alıp bir uzaklık döndürür.
+- **Döngü:** Aynı işi tekrarlar. Üç ajan için hareket seçmek üzere ajanları dolaşırız.
+- **Sınıf / nesne:** Bir kavramın verilerini ve davranışlarını bir araya getirir. `Agent` sınıfından üç ayrı ajan nesnesi oluştururuz.
+- **Liste:** Sıralı koleksiyon. Bir durumun beş Q değeri eylem sırasıyla listede tutulur.
+- **Tuple:** Burada `(x, y)` gibi sabit koordinat çifti için kullanılır.
+- **Set / küme:** Tekrarsız öğeler içerir. Bir hücrede yiyecek var mı diye hızlıca bakmak için yiyecekleri kümelerde tutarız.
+- **Dictionary / sözlük:** Anahtardan değere ulaşır. Bir durum anahtarından onun Q listesine erişiriz.
+- **`dataclass`:** Ajanın konum ve hız gibi alanlarını az kodla tanımlamayı sağlar.
+- **Tip açıklaması:** `Position = tuple[int, int]` gibi ifadeler beklenen veri biçimini anlatır; tek başına kullanıcı girdisini doğrulamaz.
 
-Uygulama bu proje klasörünün içindeki Python sanal ortamında çalışır. Kod yalnızca Python standart kütüphanesini kullanır; üçüncü taraf paket veya genel Python ortamına kurulum gerektirmez.
+`simulation.py` içindeki `json`, `math`, `random`, `dataclasses`, `datetime` ve `pathlib`; `app.py` içindeki HTTP sunucusu da Python standart kütüphanesinden gelir. Ek paket kurmuyoruz.
 
-İki temel Python dosyasını sorumluluklara ayırdık:
+## 4. Tahta, hücre ve koordinat nedir?
 
-- simulation.py: Tahta, ajanlar, hareket, ödüller, yol arama ve Q-öğrenme.
-- app.py: Tarayıcıya yerel sunucu sağlama ve toplu deneyleri çalıştırma.
+Tahta 50 sütun ve 50 satırdır. Bir hücreyi `(x, y)` ile gösteriyoruz:
 
-index.html, tarayıcı arayüzüdür. README.md kullanım ve algoritma belgelerini, hw.txt verilen ödev metnini, training_results.csv deney geçmişini, agent_memory.json öğrenilmiş değerleri tutar.
+- `x`, soldan sağa arttıkça büyür.
+- `y`, yukarıdan aşağıya arttıkça büyür.
+- Sol üst `(0, 0)`, sağ alt `(49, 49)` olur.
 
-### Adım 2: Tahtayı ve bölüm başlangıcını oluşturduk
+Örneğin `(10, 8)` konumundaki ajan sağa giderse `(11, 8)`, yukarı giderse `(10, 7)` olur. Ekran koordinatlarında yukarı gitmek `y` değerini azaltır.
 
-Tahta 2.500 ayrı koordinat hücresinden oluşur. Bir seed değeri verilirse rastgele sayı üretimi aynı sırayla ilerler ve aynı başlangıç tahtası yeniden oluşturulabilir. Bu, algoritmaları karşılaştırırken önemlidir: algoritmaların farklı sonuçlarının yalnızca birine daha kolay tahta verilmesinden kaynaklanmasını istemeyiz.
+Kodda:
 
-Bölüm oluşturulurken önce rastgele uzaklık ölçüsü seçilir. Sonra yiyecek ve ajan başlangıçları çakışmayacak biçimde seçilir. Üç ajanın hızı 1–3 aralığında rastgele atanır.
+```python
+BOARD_SIZE = 50
+Position = tuple[int, int]
+```
 
-### Adım 3: Her ajanın gözlemini sınırladık
+Tahta için 2.500 elemanlı büyük bir nesne matrisi oluşturmuyoruz. Ajan konumlarını ve yiyeceklerin koordinat kümelerini bilmek yeterli. Bir koordinat bu kümelerde yoksa o hücrede yiyecek yoktur.
 
-Ortamın içinde bütün ajanların ve yiyeceklerin gerçek konumları bulunur; çarpışmaları doğru çözmek için simülasyon bunları bilmek zorundadır. Ancak karar veren ajana tüm ajanların konumunu göstermiyoruz. Her ajan için ayrı bir gözlem hazırlanır:
+## 5. Rastgele başlangıcı nasıl kurduk?
 
-- kendi x/y konumu,
-- kendi hızı,
-- bütün yeşil yiyeceklerin konumları,
-- bütün kırmızı yiyeceklerin konumları,
-- yalnızca en yakın rakibin konumu.
+### Önce %30 sınırı
 
-Bu yapı ödevdeki “Vector Observation” fikrini Python’da bir Observation veri nesnesiyle temsil eder. Unity ML-Agents veya dış bir makine öğrenmesi paketi kullanmıyoruz.
+```text
+50 × 50 = 2.500 hücre
+2.500 × 0,30 = 750 yiyecek hücresi
+750 / 2 = her renkten en çok 375
+```
 
-## 3. Ajan hedefini nasıl seçiyor?
+Bu yüzden `MAX_FOOD_PAIRS`:
 
-Ajanlar yiyecekleri görebildiği için ilk olarak olası yeşil hedefleri sıralıyoruz. Her hedefe yaklaşık bir maliyet puanı veriyoruz:
+```python
+MAX_FOOD_PAIRS = BOARD_SIZE * BOARD_SIZE * 30 // 100 // 2
+```
 
-1. Ajanın hedefe Manhattan uzaklığı hıza bölünür. Böylece daha yakın veya daha hızlı ulaşabileceği hedefler öne çıkar.
-2. En yakın rakibin de aynı hedefe daha önce ulaşabileceği görünüyorsa hedefe rekabet cezası eklenir. Rakibin hızı gözlemde verilmediği için bu tahminde 2 hücre/tur varsayılır.
-3. Hedefin yakınındaki yeşil yiyecekler sayılır. Üç hücrelik Manhattan çevresinde yiyecek kümesi varsa küçük bir bonus verilir. Bonus sınırlıdır; büyük bir küme puanı tek başına ele geçiremez.
-4. Eşitlikte uzaklık, ardından hücre koordinatları kullanılarak kararlı bir sıralama yapılır.
+Kullanıcı 125 girerse 125 yeşil ve 125 kırmızı yerleştiririz; toplam 250 yiyecek olur. `food_pairs`, iki rengin her birinden kaç tane bulunduğunu belirtir.
 
-Bu küme bonusu gizli bir yerleşim düzeni varsaymaz. Ödev yiyeceklerin yerleşiminin rastgele olduğunu söylediği için “yiyecekler kesinlikle çizgi halinde veya belirli bölgelerde çıkar” gibi bir kural icat etmiyoruz. Yalnızca o tahtada tesadüfen birbirine yakın duran yiyecekleri birlikte toplamayı değerlendiren küçük bir kestirim kullanıyoruz.
+### Tekrarsız hücre seçimi
 
-Yol arayan üç yöntemde, öncelikli listedeki ilk sekiz yeşil hedef bir aramada denenir. Bu hedefler ajan hızına ve tahta yapısına göre erişilemiyorsa bütün yeşil hedefler içinde erişilebilir alternatif aranır. Manhattan yöntemiyse graf araması yapmayan karşılaştırma tabanıdır; hedefi puan sırasından seçer.
+`Simulation.new_episode()` şu işi yapar:
 
-## 4. Dört karar/yol bulma yöntemini neden ekledik?
+```python
+cells = self.rng.sample(range(BOARD_SIZE ** 2), self.food_pairs * 2 + 3)
+positions = [(cell % BOARD_SIZE, cell // BOARD_SIZE) for cell in cells]
+```
 
-Aynı deney ortamında dört yöntemi seçilebilir yaptık. Her biri aynı tür yiyecekleri, aynı hareket kurallarını ve aynı Q-öğrenme çerçevesini kullanır. Aralarındaki temel fark hedefe giden yönü nasıl seçtikleridir.
+`range(2500)`, hücreleri 0–2499 arasında numaralandırır. `sample`, aynı numarayı iki kez seçmez. Numara, bölüm ve kalan işlemleriyle koordinata çevrilir. Örneğin 102 numaralı hücre:
 
-### 4.1 A*: hedefe yönelen maliyetli arama
+```text
+x = 102 % 50 = 2
+y = 102 // 50 = 2
+konum = (2, 2)
+```
 
-A* bir graf üzerindeki başlangıçtan hedefe giden rotayı arar. Arama sırasında iki değeri birleştirir:
+İlk `food_pairs` hücre yeşil, sonraki aynı sayıda hücre kırmızı, son üç hücre ajan başlangıcı olur. Böylece başlangıçta yiyecekler ve ajanlar birbirleriyle çakışmaz.
 
-- g(n): Başlangıçtan mevcut hücreye kadar biriken rota maliyeti.
-- h(n): Mevcut hücreden hedefe kalan tahmini maliyet. Burada Manhattan uzaklığı kullanılır.
+Her ajanın hızı `randint(1, 3)` ile belirlenir. Hız bölüm boyunca sabittir; yeni bölümde tekrar seçilir. Ödev hızın hangi sıklıkta seçileceğini belirtmediği için bölüm başını kullandık.
 
-Öncelik f(n) = g(n) + h(n) olur. Düşük f değerli adaylar önce genişletilir. h(n), hedefe kalan hücre uzaklığını tahmin ettiği için A* aramayı hedefe doğru yönlendirir. Kullanılan h değeri, her hücrenin en az 1 maliyetli olduğu durumda gerçek maliyeti aşmayan bir kestirimdir.
+`random.Random(seed)` rastgele üreticidir. Aynı seed ve aynı işlem sırası, aynı seçimleri yeniden üretmeye yarar. Bu, test ve hata araştırmasında kullanışlıdır.
 
-Kırmızı hücre duvar değildir. Onun yerine kırmızıdan geçmenin maliyeti yükseltilir: boş hücre 1, kırmızı yiyecek hücresi 16 maliyetlidir. Böylece A* kırmızıdan dolaşan makul bir rota bulabiliyorsa onu tercih eder; zorunlu kalırsa kırmızı hücreden de geçebilir.
+## 6. Manhattan uzaklığı nedir?
 
-### 4.2 Dijkstra: kestirimsiz en düşük maliyetli arama
+Manhattan bir uzaklık ölçüsüdür. Sokakların kareli olduğu bir şehirde yatay ve dikey olarak kat edeceğimiz hücre sayısını düşünürüz:
 
-Dijkstra da aynı hücre maliyetlerini kullanır, ama hedefe kalan uzaklığı hesaplayan bir sezgisel değer kullanmaz. Yalnızca şimdiye kadarki rota maliyetine göre arama yapar; g(n) önceliklidir.
+```text
+d = |x₁ − x₂| + |y₁ − y₂|
+```
 
-Graf ağırlıkları negatif olmadığı için ulaşılan hedefin maliyeti en düşük rotayı verir. Bunun bedeli çoğunlukla daha fazla hücreyi incelemesi ve daha uzun planlama süresidir. A* ile Dijkstra’yı birlikte ölçmek, hedefe yönelik sezgisel kestirimin hız farkını göstermeye yarar.
+Dikey çizgiler mutlak değer demektir: sonucun işaretini kaldırırız. `(2, 3)` ile `(5, 7)` arasında:
 
-### 4.3 Greedy Best-First: en yakın görünen hedefe yönelme
+```text
+|2 − 5| + |3 − 7| = 3 + 4 = 7
+```
 
-Greedy Best-First, önce h(n), yani hedefe kalan Manhattan uzaklığı küçük olan arama hücrelerini seçer. Birikmiş rota maliyeti yalnızca eşitlik bozucudur. Uygulaması hedefe doğrudan yönelir ve çoğu zaman daha az arama yapar; ancak toplam maliyeti en düşük rotayı bulacağı garanti değildir. Kırmızı hücreleri veya dolambaçlı yolları A* kadar iyi değerlendirmeyebilir.
+`simulation.py` içindeki uygulaması:
 
-### 4.4 Manhattan: aramasız, yerel karşılaştırma
+```python
+def manhattan(a, b):
+    return abs(a[0] - b[0]) + abs(a[1] - b[1])
+```
 
-Manhattan yöntemi A*, Dijkstra ve Greedy gibi tahta üzerinde rota grafiği aramaz. Ajanın o an yapabileceği hareketleri projekte eder ve her hareketten sonra hedefe kalan Manhattan uzaklığını puanlar. Kırmızıya çarpma cezası ve öğrenilmiş Q değeri de karara katılır.
+Projede iki amaçla kullanıyoruz:
 
-Bu yöntem, daha kapsamlı planlamanın katkısını ölçmek için basit bir taban çizgisidir. Yakın çevrede iyi karar verebilir; fakat uzaktaki engelleri veya uzun vadeli dolambaçları aramayacağı için takılabilir. Seed 50 deneyinde 4.000 adım sınırına ulaşıp 40 yeşilin 39’unu toplaması bu sınırlamaya bir örnektir.
+1. Bölümün rakip ölçüsü Manhattan seçildiyse en yakın diğer ajanı belirlemek.
+2. Ajanın hedef yiyeceğini seçmek ve hedef için rekabet durumunu özetlemek.
 
-## 5. Hız ve gerçek hareketi aramaya nasıl yansıttık?
+Bu fonksiyon bir rota çizmez. İki nokta arasındaki yatay/dikey uzaklığı hesaplar. Hızın 2 veya 3 olması, yiyecekte durma ve diğer ajanların yiyecek toplaması nedeniyle bu sayı gerçek tamamlanma süresinin kesin hesabı değildir.
 
-Ajan bir eylem seçtiğinde yalnızca bir hücre değil, hızı kadar hücre ilerleyebilir. Örneğin hızı 3 olan “Right” eylemi, önünde yiyecek veya tahta kenarı yoksa üç hücre ilerler. Sadece bir hücrelik adımlardan oluşan bir yol araması ajanın gerçek hareketini yanlış modelleyebilir.
+## 7. Öklid uzaklığı nedir, çapraz hareket yokken neden var?
 
-Bu nedenle A*, Dijkstra ve Greedy arama grafiğinde bir kenar, ajanın bir eylemde gidebildiği en fazla 1–3 hücrelik hareketi temsil eder. Hareket yeşil yiyeceğe, kırmızı yiyeceğe veya tahtanın kenarına ulaşınca erken biter. Arama maliyeti geçilen hücreleri hesaba katar.
+Öklid uzaklığı iki nokta arasındaki düz çizgi uzunluğudur:
 
-Hız ve konuma göre bazı hücrelere bir rotayla erişmek zor olabilir. Ajan ilk tercihindeki hedefe gidemiyorsa başka yeşil hedef arar. Bu, planlayıcının erişilemeyen tek bir yiyeceği tekrar tekrar seçmesine karşı ek bir korumadır.
+```text
+d = √((x₁ − x₂)² + (y₁ − y₂)²)
+```
 
-## 6. Planlanan rota ile Q-öğrenmeyi nasıl birleştirdik?
+Aynı örnekte sonuç `√(3² + 4²) = 5` olur. Python'da ayrıca formül yazmak yerine standart `math.dist` fonksiyonunu kullanıyoruz.
 
-Yol bulma bir sonraki hareket yönünü önerir; Q tablosuysa ajanın deneyiminden öğrendiği hareket değerini ekler. Son karar böylece hem mevcut rotayı izler hem geçmişte ödül getiren eylemleri dikkate alır.
+**Uzaklık ölçmek ile hareket etmek farklı işlerdir.** Öklid seçildiğinde ajan çapraz hareket etmez. Yalnızca hangi rakibin en yakın sayılacağı değişir. Son esas aldığımız ödev metni iki ölçü arasından rastgele seçim istediği için ikisini de koruduk.
 
-Her olası eylem için kabaca şu puan hesaplanır:
+Örneğin ana ajan `(0, 0)`, diğerleri `(3, 3)` ve `(0, 5)` olsun:
 
-- Eylemden sonra hedefe kalacak uzaklık azaldıkça puan yükselir.
-- Kırmızı hücreye giden hareketin puanı ciddi biçimde düşer.
-- A*, Dijkstra ve Greedy’nin önerdiği ilk yön için ek rota bonusu verilir.
-- “No Action”, hedef ajanın bulunduğu hücre değilse cezalandırılır.
-- Öğrenilmiş Q değeri puana eklenir.
-- Bazen keşif için daha düşük puanlı ama güvenli bir eylem rastgele seçilir.
+| Rakip | Manhattan | Öklid |
+|---|---:|---:|
+| `(3, 3)` | 6 | yaklaşık 4,24 |
+| `(0, 5)` | 5 | 5 |
 
-Dolayısıyla Q tablosu tek başına yolu bulmaz; planlayıcıyla birlikte karar verir. Manhattan taban çizgisinde yol planlayıcı bonusu yoktur.
+Manhattan ikinci rakibi, Öklid birinci rakibi daha yakın bulur.
 
-## 7. Hareket, yiyecek ve çarpışma kuralları
+Kodun iki parçası:
 
-Her simülasyon adımında önce üç ajanın gözlemleri hazırlanır ve her ajan için bir eylem seçilir. Sonra hareketler eş zamanlı mikro-adımlar halinde yürütülür. Hızı 1 olan ajan bir hücre, hızı 3 olan ajan en fazla üç hücre ilerleyebilir. Bir ajan tahtanın dışına çıkamaz. Yiyeceğe ulaşınca o ajanın o turdaki hareketi durur.
+```python
+# new_episode()
+self.metric = self.rng.choice(("Manhattan", "Euclidean"))
 
-Bir hedef hücreye aynı anda birden fazla ajan giderse:
+# observation_for()
+distance = manhattan if self.metric == "Manhattan" else math.dist
+```
 
-1. Yeşil yiyecek için “Left” seçen ajan varsa o kazanır.
-2. Birden fazla sol hareket varsa düşük ajan numarası kazanır.
-3. Sol hareket yoksa düşük ajan numarası eşitliği bozar.
+Seçim bölüm başında bir kez yapılır. Aynı uzaklıkta iki rakip varsa düşük ajan numarasıyla eşitlik bozulur. Ödev bu eşitliği açıklamadığı için tutarlı bir sonuç seçtik.
 
-Kazanan yeşil yiyeceği alır ve +1 ödül kazanır. Kırmızı yiyeceği alan −1 alır. Yiyecek tahtadan silinir. Bir ajanın ödülü kendi içinde tutulur; bölüm karşılaştırmasında üç ajanın ödülleri toplanır.
+## 8. Ajan neyi biliyor, neyi bilmiyor?
 
-Bölüm, bütün yeşil yiyecekler toplandığında veya 4.000 simülasyon adımına ulaşıldığında tamamlanır. İkinci sınır, başarısız veya takılan bir politikanın sonsuza dek çalışmasını önler.
+**Gözlem**, ajanın bir karar verirken kullanmasına izin verilen bilgidir. `Observation` içinde şunlar vardır:
 
-## 8. Öğrenme: Q-learning ve eligibility trace
+```python
+position       # Kendi konumu
+speed          # Kendi hızı
+green_foods    # Bütün yeşil yiyeceklerin konumları
+red_foods      # Bütün kırmızı yiyeceklerin konumları
+nearest_agent  # Tek bir rakibin konumu
+```
 
-### 8.1 Durum tablosu
+Diğer rakibin konumu ve iki rakibin hızları bu nesnede bulunmaz. `frozenset`, yiyecek koordinatlarını değiştirilemeyen bir görünüm olarak taşır; karar hazırlığı sırasında ajan tahtadaki yiyecekleri değiştiremez.
 
-Her ajanın her algoritma için ayrı durum-eylem değerleri vardır. Durum çok büyük olmasın diye tüm tahtayı bir anahtara yazmıyoruz. Durum özeti şu özellikleri içerir:
+Simülasyon motoru bütün ajanları bilmek zorundadır; aksi halde hareket ve çarpışmaları yönetemez. `observation_for()` bu geniş bilgiyi daraltır ve karar koduna yalnızca izin verilen gözlemi gönderir. Ekranda bütün ajanların görünmesi, ajan kararına hepsinin verildiği anlamına gelmez.
 
-- seçilen hedefin ajana göre x ve y yönü,
-- en yakın kırmızı yiyeceğin uzaklık aralığı,
-- rakibin hedefe daha önce ulaşma ihtimali için rekabet etiketi,
-- ajanın kendi hızı.
+## 9. Beş eylemi kodda nasıl gösterdik?
 
-Her eylem Yukarı, Aşağı, Sol, Sağ veya No Action olabilir. Q(s,a), ilgili durum s içinde eylem a seçildiğinde beklenen uzun vadeli ödülün öğrenilmiş tahminidir.
+```python
+ACTIONS = ("Up", "Down", "Left", "Right", "No Action")
+DELTAS = ((0, -1), (0, 1), (-1, 0), (1, 0), (0, 0))
+```
 
-### 8.2 Zamansal fark güncellemesi
+Aynı sıradaki elemanlar birbirini karşılar:
 
-Hareketten sonra ajan aldığı ödülü ve yeni durumu kullanarak tahminini düzeltir:
+| İndeks | Eylem | Konum değişimi |
+|---:|---|---|
+| 0 | Yukarı | `(0, -1)` |
+| 1 | Aşağı | `(0, 1)` |
+| 2 | Sol | `(-1, 0)` |
+| 3 | Sağ | `(1, 0)` |
+| 4 | Eylemsiz | `(0, 0)` |
 
-    δ = r + γ × max(Q(s′, a′)) − Q(s, a)
+Hiçbir değişimde hem x hem y aynı anda değişmez; çapraz hareket yapılamaz. “No Action” bir karar seçeneğidir, otomatik bekleme durumu değildir.
 
-Burada:
+Ödev aynı maddede “4 branches” ifadesini ve beş eylemi birlikte veriyor. Uygulama, açıkça listelenen beş eylemi kullanır. Beş ayrı eşzamanlı hareket değil, her adımda bu listeden tek seçim yapılır.
 
-- r mevcut harekette alınan ödüldür: normal hareket için 0, yeşilde +1, kırmızıda −1.
-- γ = 0.90 gelecekteki ödülün bugünkü karar için ağırlığıdır.
-- s mevcut durum, s′ yeni durumdur.
-- a mevcut eylem, a′ sonraki durumda değerlendirilen eylemdir.
-- δ tahmindeki hatadır.
+## 10. Hızlı ajan yiyeceğin üzerinden atlıyor mu?
 
-Basit Q-learning yalnızca son seçilen eylemi düzeltirdi. Bu projede eligibility trace kullanıyoruz: yakın geçmişteki durum-eylem çiftlerine de iz değeri bırakılır. İzler her adımda γ × λ ile küçülür; λ = 0.75’tir. Bir ödül geldiğinde, o ödüle giden yakın geçmişteki kararlar da bir miktar güncellenir. Böylece ajan ödülü yalnızca son harekete bağlamaz.
+Hayır. Hızı 3 olan bir ajanı bir anda üç hücre ileri ışınlamıyoruz. `Simulation.move()` hareketi **mikro-adımlara**, yani tek hücrelik parçalara böler.
 
-Öğrenme oranı ziyaret sayısı arttıkça azaltılır:
+Örneğin ajan `(4, 5)` konumunda, hızı 3 ve sağa gidiyor olsun. `(6, 5)` hücresinde yiyecek varsa:
 
-    α = max(0.04, 0.30 / √(ziyaret sayısı + 1))
+```text
+1. mikro-adım: (5, 5)
+2. mikro-adım: (6, 5) → yiyecek alınır ve hareket durur
+3. mikro-adım: bu ajan hareket etmez
+```
 
-Daha önce çok denenmiş bir kararın değeri daha küçük adımlarla değiştirilir. Öğrenilmiş Q değerleri sayısal kararlılık için −10 ile +10 arasında tutulur.
+Tahta dışına çıkmak da hareketi durdurur. `(0, 5)` konumundan sola giden ajan `(−1, 5)` noktasına geçemez.
 
-### 8.3 Keşif ve kullanma dengesi
+`project()` aynı sınır/yiyecek kurallarıyla tek bir aday hareketi önceden hesaplar. Gerçek tahtayı değiştirmez; ajanın bir yönde kırmızı yiyeceğe çarpıp çarpmayacağını anlamak için kullanılır. Gerçek eşzamanlı hareket ve ödül dağıtımı `move()` içindedir.
 
-Ajanın keşif olasılığı ε başlangıçta 0.18’dir. ε olasılığıyla yeni, mümkünse kırmızıya götürmeyen bir hareket dener; diğer zamanlarda en yüksek puanlı hareketi kullanır.
+## 11. Aynı yiyeceğe giden ajanları nasıl çözdük?
 
-Her algoritmanın ε değeri ayrıdır. Son 100 bölümdeki ortalama takım ödülü pozitifse ε %3 azaltılır; negatifse %5 artırılır. Değer 0.02 ile 0.25 arasında tutulur. Başarılı politika daha çok kullanılmaya başlanır; uzun süredir kötü sonuç alıyorsa ajan tekrar keşfe yönelir.
+Her mikro-adımda hareket eden ajanların varış hücreleri `claims` sözlüğünde toplanır. Bir hücreye giden iki ajan varsa o hücrenin aday listesi ikisini de içerir.
 
-Buradaki “zamanla akıllanma” bir sinir ağı eğitimi değildir. Tablo tabanlı Q-learning, her hareket sonrasında değerleri günceller. Süreç yinelemeli çalışır; 4.000 adımlık bölümleri Python fonksiyon çağrısıyla özyinelemeli biçimde yürütmüyoruz. Bu, hem daha anlaşılırdır hem de Python çağrı yığını sınırına takılmayı önler.
+Yeşilde kazanan:
 
-### 8.4 Neden tabloları ayırdık?
+```python
+winner = min(claimants,
+             key=lambda index: (ACTIONS[actions[index]] != "Left", index))
+```
 
-Q değeri anahtarı algoritmayı, ajan numarasını, durumu ve eylemi içerir. Bu sayede:
+Python'da `False`, sıralamada `True` değerinden önce gelir. Sol eylemi için `!= "Left"` sonucu `False` olur; dolayısıyla sol hareket öncelik alır. Birden fazla sol varsa veya hiç sol yoksa düşük indeks kazanır; indeksler ajan numarası sırasındadır.
 
-- A* ajanının öğrendikleri Dijkstra sonuçlarına karışmaz.
-- Ajan 1’in deneyimleri doğrudan ajan 2’ye yazılmaz.
-- Her yöntemin keşif oranı ve performansı ayrı izlenir.
+Yalnızca kazanan +1 alır. Yiyecek bir kez silinir. Yiyeceğe aynı anda ulaşan bütün adaylar o tur için durdurulur; kaybeden de artık aynı hücreye gelmiştir.
 
-Üç ajan aynı tahtada hareket etse de kendi ödülünü alır ve kendi Q değerlerini günceller. Bölüm puanı bu üç ödülün toplamıdır.
+Kırmızıda da yiyecek bir kez tüketilir ve yalnızca bir ajan −1 alır. Ödev kırmızıdaki eşitlik kuralını belirtmediğinden düşük ajan numarası kullanılır.
 
-## 9. Deney düzeni ve karşılaştırma
+Bu kural **aynı mikro-adımda varış** için geçerlidir. Başka bir ajan daha erken mikro-adımda yiyeceği almışsa daha sonra gelen ajan onu geri alamaz. Ajanları birbirine duvar yapmadık; ödev böyle bir engel kuralı tanımlamıyor.
 
-Tek bir algoritmanın tek bir rastgele tahtadaki sonucuna bakmak güvenilir kıyaslama değildir. Eğitim komutu eşleştirilmiş seed kullanır. Aynı turdaki A*, Dijkstra, Greedy ve Manhattan aynı seed ile açılır; böylece yiyecek yerleri, ajan başlangıçları ve hızlar aynıdır. Sonraki turda seed bir artırılır.
+## 12. Ödül, durum ve Q değeri arasındaki fark
 
-Bellek algoritma başına ayrı olduğu için yöntemler geçmiş deneyimlerini korur ve birbirinin tablosuna yazmaz. Her tamamlanan bölümde sonuç CSV’ye eklenir ve Q belleği diske kaydedilir.
+Öğrenmeyi anlayabilmek için bu üç kavramı ayıralım:
 
-Performans ölçülerimiz:
+- **Ödül `r`:** Az önce ne oldu? Yeşil alındıysa +1, kırmızı alındıysa −1, yiyecek alınmadıysa 0.
+- **Durum `s`:** Ajan hangi koşullar altında karar verdi? Örneğin hedef sağ üstte, hız 2 ve solda kırmızı riski var.
+- **Q değeri `Q(s,a)`:** Bu durumda bu hareketi seçmek gelecekte ne kadar ödül getirebilir? Ajanın öğrendiği tahmindir.
 
-- Yeşil: Toplanan yeşil yiyecek adedi.
-- Kırmızı: Alınan kırmızı yiyecek adedi.
-- Ödül: Üç ajanın toplam ödülü.
-- Adım: Bölümün tamamlanması için geçen simülasyon adımı.
-- Planlama süresi: Eylem kararı ve yol planlaması sırasında ölçülen Python işlem süresi.
+Q değeri gerçek skor değildir. Ajanın 7 puanı olabilir ama belirli bir durumdaki sağ hareketinin Q değeri 0,35 olabilir. Biri geçmişte topladığı gerçek ödül, diğeri geleceğe ilişkin tahmindir.
 
-Planlama süresi tüm uygulamanın çalışma süresi değildir. Tahtayı çizme veya tarayıcıda gösterme süresini değil, karar hesaplamalarının ölçülen süresini gösterir.
+`Agent.reward` gerçek skoru hesaplar:
 
-## 10. Şu ana kadarki deney sonuçları
+```python
+@property
+def reward(self):
+    return self.green - self.red
+```
 
-Eğitim tamamlandığında kayıt dosyasında dört yöntem için 30’ar bölüm, toplam 120 bölüm vardı.
+Örneğin 12 yeşil, 3 kırmızı alan ajanın skoru `12 − 3 = 9` olur. Takımın toplamı arayüzde özetlenir; öğrenme sırasında bu toplamı her ajana ödül olarak dağıtmıyoruz. Her biri kendi aldığı yiyecekten öğrenir.
 
-### Kolay karşılaştırma: seed 42
+## 13. Bütün tahtayı ezberletmeden durumu nasıl özetledik?
 
-Her renkten 40 yiyecekle algoritma başına beş bölüm çalıştırıldı. Bu beş bölümde bütün algoritmalar ortalama 40 yeşil topladı ve sıfır kırmızı aldı. Ortalama planlama süreleri:
+Tahtanın her olası düzeni için ayrı öğrenme tablosu açmak çok büyük bir bellek gerektirirdi. `Simulation.state_values()` daha küçük bir durum anahtarı üretir.
 
-| Yöntem | Ortalama yeşil | Ortalama kırmızı | Ortalama ödül | Planlama |
-|---|---:|---:|---:|---:|
-| A* | 40 | 0 | 40 | 200 ms |
-| Dijkstra | 40 | 0 | 40 | 631 ms |
-| Greedy Best-First | 40 | 0 | 40 | 124 ms |
-| Manhattan | 40 | 0 | 40 | 135 ms |
+Önce Manhattan'a göre en yakın yeşil hedefi buluruz. Eşit uzaklıkta koordinat çiftiyle sıralama yapılır. Sonra anahtara şunları koyarız:
 
-Burada ödül üst sınıra ulaştığı için “ödül bakımından en iyi algoritma budur” sonucunu çıkaramayız. Farkı daha çok planlama süresinde görüyoruz; Dijkstra bu örnekte daha uzun hesap yaptı.
+| Parça | Anlamı | Neden gerekli? |
+|---|---|---|
+| Ajan numarası | 1, 2 veya 3 | Öğrenme tablolarını ayırır |
+| `sx,sy` | Hedefin yatay/dikey yönü: −1, 0, +1 | Hedefe hangi yönlerde yaklaşılacağını özetler |
+| `v` | Ajanın hızı | Aynı hareket hızla birlikte farklı sonuç verir |
+| `r` | Dört hareket yönündeki kırmızı risklerinin bit maskesi | Yakındaki tehlikeleri ayırt eder |
+| `c` | Görünen rakip hedefe en az bizim kadar yakın mı? | Rekabeti öğrenilen duruma dahil eder |
 
-### Zor karşılaştırma: seed 50
+Örnek anahtar:
 
-Aynı 40 yeşil/40 kırmızı tahtası önce her algoritmanın 9. bölümünde, sonra 30. bölümünde ölçüldü:
+```text
+1|1,-1|v2|r4|c1
+```
 
-| Yöntem | 9. bölüm: yeşil / adım | 30. bölüm: yeşil / adım | Son planlama |
-|---|---:|---:|---:|
-| A* | 19 / 4.000 | 40 / 95 | 57 ms |
-| Dijkstra | 19 / 4.000 | 40 / 96 | 135 ms |
-| Greedy Best-First | 19 / 4.000 | 40 / 158 | 99 ms |
-| Manhattan | 22 / 4.000 | 39 / 4.000 | 1.823 ms |
+Bunu şöyle okuruz: “Ajan 1, hedef sağ üstte, hız 2, sol yönünde kırmızıya çarpma riski var ve görünen rakip hedefe en az bizim kadar yakın.”
 
-Her iki ölçümde de kırmızı yiyecek alınmadı. Son çalışmada üç rota yöntemi bütün yeşilleri topladı; Manhattan bir yiyecekte takılıp adım sınırına ulaştı.
+### İşaret bilgisini nasıl çıkardık?
 
-Bu sonuç yalnızca “ajan öğrendiği için iyileşti” anlamına gelmez. İlk ölçümden sonra hızla uyumlu rota araması ve erişilebilir başka hedefe geçiş gibi kod düzeltmeleri de yapıldı; Q tablosu da bu sırada deneyim kazandı. Değişikliklerin ve öğrenmenin etkisini ayırmak için aynı kod sürümünü sabitleyip çoklu seed’lerde, yeterli sayıda tekrar çalıştırmak gerekir. Bu rapordaki ölçümler gözlem ve kıyaslama örneğidir; istatistiksel kesinlik iddiası değildir.
+```python
+sx = (dx > 0) - (dx < 0)
+```
 
-## 11. Sonuçlar hangi dosyalara kaydediliyor?
+Python'da doğru `1`, yanlış `0` gibi davranır. `dx` pozitifse `1 − 0 = 1`; negatifse `0 − 1 = −1`; sıfırsa `0 − 0 = 0` olur. Aynısını y için yaparız.
 
-### agent_memory.json
+### Bit maskesi ne demek?
 
-Her algoritmanın Q değerlerini, ziyaret adetlerini, bölüm sayısını, ε değerini, son ödüllerini ve arayüz grafiği için son performans satırlarını saklar. Her bölüm tamamlanınca önce geçici dosyaya yazılır, sonra asıl dosyayla değiştirilir. Uygulama yeniden açılınca bu değerler yüklenir; öğrenme sıfırlanmaz.
+Dört ayrı evet/hayır bilgisini tek sayıda tutuyoruz:
 
-### training_results.csv
+| Yön | Risk varsa eklenen sayı |
+|---|---:|
+| Yukarı | 1 |
+| Aşağı | 2 |
+| Sol | 4 |
+| Sağ | 8 |
 
-Her tamamlanan bölüme bir satır ekler. Seed, algoritma, bölüm numarası, yiyecek adedi, adım, yeşil/kırmızı, ödül, ε ve planlama milisaniyesi sütunları vardır. Excel veya metin düzenleyiciyle incelenebilir.
+Sol ve sağ riskliyse `r = 4 + 8 = 12` olur. `1 << action`, ilgili sayıyı üretir. `red_mask & (1 << action)` o yöndeki risk bitinin açık olup olmadığını kontrol eder. Risk, `project()` ile ajanın kendi hızı ve görünür yiyecekler kullanılarak hesaplanır; yiyeceğin arkasına geçilmiş varsayılmaz.
 
-### Arayüz
+`c` için rakibin ve bizim hedefe Manhattan uzaklıklarımız karşılaştırılır. Hızı bilinmeyen rakip için gerçek varış süresi tahmin etmiyoruz. Rakip, bölümde rastgele seçilen ölçüyle gözleme alınmıştır; hedef rekabetini özetlerken yine Manhattan kullanırız.
 
-app.py yerel bir HTTP sunucusu açar ve tarayıcıyı 127.0.0.1 adresine yönlendirir. index.html tahtayı, ajanları, yiyecekleri ve rakip gözlem çizgilerini gösterir. Başlat/Duraklat, yeni bölüm, yiyecek sayısı ve algoritma seçimi bulunur. Ayrıca son bölümlerin algoritma karşılaştırma tablosu ve ödül grafiği gösterilir.
+Bu sıkıştırmanın bedeli vardır: farklı tahtalar aynı anahtara dönüşebilir. Örneğin hedef bir hücre veya on hücre sağda olsa da yön aynı olabilir. Yöntem bu yüzden yaklaşık öğrenir; bütün tahtalar için en iyi kararı garanti etmez.
 
-Sunucu bilgisayarın dış ağına değil kendi yerel adresine bağlanır. Bölüm tamamlandıkça veriler kaydedilir; uygulama Ctrl+C ile kapatılırken öğrenme belleğini tekrar yazar.
+## 14. Q tablosu nasıl tutuluyor?
 
-## 12. Projeyi çalıştırma
+`LearningMemory.q_values`, anahtarı durum, değeri beş Q sayısı olan bir sözlüktür:
 
-PowerShell’i ai-lab klasöründe açın. Ortam yoksa:
+```json
+{
+  "1|1,-1|v2|r4|c1": [0.1, -0.1, -0.6, 0.1, -0.05]
+}
+```
 
-    python -m venv .venv
+Liste sırası her zaman `Up, Down, Left, Right, No Action` sırasıdır. Bu örnekte yukarı ve sağ başlangıçta en yüksek tahmine sahiptir; sol, kırmızı riski nedeniyle düşük başlar.
 
-Tarayıcı arayüzünü başlatmak için:
+Aynı anahtara ait `visits` listesi, her eylemin kaç defa gerçekten öğrenme güncellemesi aldığını tutar:
 
-    .\.venv\Scripts\python.exe app.py
+```json
+{
+  "1|1,-1|v2|r4|c1": [3, 0, 1, 7, 0]
+}
+```
 
-Başlangıçta otomatik öğrenme çalışır. Terminaldeki işlemi durdurmak için Ctrl+C kullanılır.
+Bu, yukarı eyleminin 3, solun 1, sağın 7 kez güncellendiği anlamına gelir. Ziyaret sayısını bu sürümde öğrenme oranını değiştirmek için kullanmıyoruz; yapılan öğrenmeyi incelemek için saklıyoruz.
 
-Algoritmaları aynı seed’lerde toplu kıyaslamak için:
+Anahtar başında ajan numarası bulunduğundan ajan 1'in ödülü ajan 2'nin satırını değiştirmez. Fiziksel olarak tek sözlük kullanılsa da tablolar mantıksal olarak bağımsızdır.
 
-    .\.venv\Scripts\python.exe app.py --train-episodes 20 --food-pairs 125 --seed 42
+Bir sonraki durumun değerlerine bakarken de yeni satır oluşturulabilir. Dolayısıyla “öğrenilen durum” sayacı içindeki bazı satırlar henüz seçilmiş bir eylemle güncellenmemiş olabilir. Gerçek işlem sayısını `visits` toplamından buluruz; arayüz bunu “Q güncellemesi” olarak gösterir.
 
-Bu komut her yöntem için 20 bölüm çalıştırır; dört yöntem seçiliyse toplam 80 bölüm eder. Kısa deneme için yiyecek sayısını düşürebilirsiniz:
+## 15. Ajan ilk anda hiçbir şey bilmiyorsa nasıl hareket ediyor?
 
-    .\.venv\Scripts\python.exe app.py --train-episodes 5 --food-pairs 40 --seed 42
+Yeni bir durumun bütün Q değerlerini sıfır başlatmak mümkün. Fakat 50 × 50 tahtada seyrek yiyeceklerle tamamen amaçsız dolaşmak ilk denemeleri uzatır. Görünür yiyecek bilgisinden yararlanan küçük bir **başlangıç tercihi** veriyoruz:
 
-Yalnız belirli algoritmaları seçmek için:
+```python
+initial = [
+    0.1 * (x * sx + y * sy) - 0.5 * bool(red_mask & (1 << action))
+    for action, (x, y) in enumerate(DELTAS)
+]
+initial[-1] = -0.05
+```
 
-    .\.venv\Scripts\python.exe app.py --train-episodes 20 --food-pairs 125 --seed 42 --algorithms "A*" Dijkstra Manhattan
+Hedefe doğru yön +0,1, hedeften uzaklaşan yön −0,1 alabilir. Kırmızıya çarpacak yönün başlangıç değeri ayrıca 0,5 azaltılır. Eylemsiz bekleme −0,05 ile başlar.
 
-Kod kontrolleri:
+Örneğin hedef sağdaysa sağ hareketin başlangıç tercihi +0,1 olur. Sağda kırmızı riski varsa bu `0,1 − 0,5 = −0,4` olur.
 
-    .\.venv\Scripts\python.exe -m py_compile app.py simulation.py
-    .\.venv\Scripts\python.exe simulation.py
+Bu değerler **öğrenilmiş deneyim değildir**; bizim verdiğimiz küçük ön bilgidir. `LearningMemory.values()` yalnızca daha önce görülmeyen bir anahtarda bu listeyi ekler. Aynı anahtar yeniden geldiğinde başlangıç değerlerini tekrar yazmaz; mevcut öğrenilmiş değerleri kullanır.
 
-Yeni deneyler mevcut belleği sürdürür ve CSV’ye eklenir. Baştan eğitim yapmak istenirse uygulama kapatıldıktan sonra proje içindeki agent_memory.json silinebilir. CSV’yi silmek geçmiş ölçümleri de kaldırır.
+Gerçek çevre ödülü hâlâ yalnızca +1, −1 veya 0'dır. Hedefe yaklaşmak için ayrı bir gerçek ödül eklemiyoruz. Başlangıçta verilen yön tercihleri, Q güncellemeleriyle değişir. Bu yüzden gözlenen davranış hem başlangıç bilgisinin hem de sonraki deneyimin sonucudur.
 
-## 13. Bilinen sınırlamalar ve geliştirme fikirleri
+## 16. Ajan hangi eylemi seçiyor: ε-greedy
 
-- Manhattan yerel ve açgözlü bir yöntemdir; zor seed 50’de son bir yeşil yiyeceği alamadı. Daha iyi takılma tespiti, hedefe ilerleme sayacı veya güvenli rota yenileme eklenebilir.
-- Rakibin hızını gözlemlemiyoruz. Hedef rekabeti puanında 2 hücre/tur tahmini kullanılıyor; bu bir kestirimdir, ödev kuralı değildir.
-- Küme bonusu küçük bir yerel kestirimdir. Yiyecekler rastgele dağıtıldığı için düzenli bir gizli örüntü öğrenmeye çalışmıyoruz.
-- Beş tur gibi küçük örneklerde sonuçlar rastgeleliğe çok bağlıdır. Güçlü karşılaştırma için çok sayıda eşleştirilmiş seed ve ortalama/dağılım raporlanmalıdır.
-- 4.000 adım sınırı, çözülemeyen bölümün sonsuz sürmesini önler. Bu sınıra ulaşmak bölümün başarıyla tamamlanmadığını gösterir.
-- Ödev “4 branches” ile beş hareket değerini birlikte yazmıştır. Uygulama beş hareket değerini uyguladı; sunumda bu yorum kararını açıkça belirtin.
-- Öğrenme tablosu küçük, özetlenmiş durumları kullanır. Hızlı ve bağımlılıksızdır; fakat büyük veya çok çeşitli senaryolarda her olası durumu ayrı öğrenmek genelleme sorununa yol açabilir.
+Sadece şu an en iyi görünen hareketi yapmak, başka bir seçeneğin daha iyi olduğunu öğrenmeyi engelleyebilir. Buna karşı biraz **keşif** yaparız.
 
-## 14. Sunumda sorulabilecek sorular ve kısa yanıtlar
+`Simulation.choose_action()`:
 
-### Bu proje ne yapıyor?
+```python
+if self.rng.random() < self.memory.epsilon:
+    return self.rng.randrange(len(ACTIONS))
+best = max(values)
+return self.rng.choice([i for i, value in enumerate(values) if value == best])
+```
 
-50 × 50 tahtada üç ajanı aynı ortamda çalıştırıyor. Ajanlar görünen yeşil yiyecekleri toplamaya, kırmızılardan kaçınmaya çalışıyor. Dört karar yöntemi ve çevrimiçi Q-öğrenme uygulanıyor; sonuçlar JSON ve CSV’ye kaydediliyor.
+- `ε` olasılığıyla beş eylemden biri rastgele seçilir.
+- Geri kalan zamanda en yüksek Q değerine sahip eylem seçilir.
+- En iyi değerde eşitlik varsa adaylar arasında rastgele seçim yapılır.
 
-### Neden dört algoritma kullandınız?
+Başlangıçta `ε = 0,20` olduğu için yaklaşık her beş kararın birinde keşif yapılır. Bu, her beşinci kararın mutlaka rastgele olduğu anlamına gelmez; her kararda ayrı olasılık hesabıdır.
 
-Tek bir yöntemin iyi veya kötü görünmesinin nedenini anlamak için. A* hedefe yönelik ve maliyet/risk değerlendiriyor; Dijkstra kestirimsiz en düşük maliyeti buluyor; Greedy hedefe yakınlığı önceleyip hız karşılaştırması sağlıyor; Manhattan yöntemiyse aramasız basit taban çizgisi.
+Keşif oranı tamamlanan bölüm sayısıyla azalır:
 
-### A* nasıl karar veriyor?
+```python
+max(0.05, 0.20 * 0.97 ** episodes)
+```
 
-Her arama hücresi için başlangıçtan gelen gerçek maliyet g ile hedefe kalan uzaklığın kestirimi h toplanıyor. En düşük g+h değerli hücre önce inceleniyor. Kırmızı hücreye girmenin maliyeti 16 olduğu için algoritma güvenli bir dolaşma yolu varsa onu tercih ediyor.
+İlk bölümde 0,20; 10 bölümden sonra yaklaşık 0,147 olur. En az 0,05 olarak tutulur. Böylece ajan öğrendiklerini daha sık kullanırken yeni davranışları tamamen bırakmaz.
 
-### Dijkstra ile A* arasındaki temel fark ne?
+Üç ajanın Q değerleri ayrıdır; bu sade sürümde α, γ ve ε programı ortaktır. Rastgele keşif kırmızı yiyeceğe götürebilir. Hata yapabilmek, olumsuz ödülden öğrenmenin bir parçasıdır.
 
-İkisi de rota maliyetini kullanıyor. Dijkstra yalnızca g maliyetini değerlendiriyor; A* g’ye hedef uzaklığı h kestirimini ekliyor. Bu yüzden A* çoğu zaman hedef yönündeki hücreleri önce inceler ve daha az hesap yapabilir.
+## 17. Q-learning matematiğini adım adım anlayalım
 
-### Q-learning ajanı tam olarak ne öğreniyor?
+Kullandığımız güncelleme:
 
-Her özet durum ve eylem için bir Q değeri tutuyor. Hareketten sonra aldığı ödül ile sonraki durumda tahmin edilen en iyi ödülü karşılaştırıp bu değeri güncelliyor. Yeşil ve kırmızı etkileşimlerden sonra ödül bilgisi yakın geçmişteki eylemlere eligibility trace aracılığıyla da yayılıyor.
+```text
+Q_yeni(s,a) = Q_eski(s,a) + α × [r + γ × max Q(s′,a′) − Q_eski(s,a)]
+```
 
-### Ajan zamanla nasıl daha iyi oluyor?
+Sembollerin anlamı:
 
-Q değerleri her simülasyon adımında güncelleniyor ve JSON dosyasına kaydediliyor. Uygulama yeniden açıldığında aynı değerleri yüklediği için öğrenme sürüyor. Başarılı sonuçlarda keşif olasılığı azalıyor; negatif ortalamada tekrar keşif artıyor. CSV’de bölüm sonuçları karşılaştırılabiliyor.
+| Sembol | Anlamı | Bu projede |
+|---|---|---|
+| `s` | Hareketten önceki durum | Durum anahtarı |
+| `a` | Yapılan hareket | Beş eylemden biri |
+| `r` | Bu harekette alınan ödül | +1, −1 veya 0 |
+| `s′` | Hareketten sonraki durum | Yeni gözlemden hesaplanır |
+| `max Q(s′,a′)` | Yeni durumda tahmini en iyi gelecek | Beş Q değerinin en büyüğü |
+| `α` | Yeni bilgiye ne kadar ağırlık verelim? | 0,20 |
+| `γ` | Gelecekteki ödülü ne kadar önemseyelim? | 0,90 |
 
-### Ajanlar birbirlerinin tamamını görebiliyor mu?
+### α ne işe yarar?
 
-Hayır. Karar gözleminde yalnızca en yakın rakibin konumu var. Yiyecekleri ise hepsi görebiliyor. Simülasyon motoru çarpışmayı çözebilmek için bütün konumları bilir; bu bilgi ajan gözlemine verilmez.
+Öğrenme oranıdır. 0,20, eski tahmini hesaplanan yeni hedefe doğru farkın %20'si kadar değiştirmek demektir. Tek bir deneyim bütün geçmişi silmez.
 
-### Neden yiyecek kümelerine küçük bonus verdiniz?
+### γ ne işe yarar?
 
-Yakın çevrede birden fazla yeşil varsa aynı bölgeye ilerlemek birden fazla yiyeceği verimli toplamaya yardımcı olabilir. Yiyeceklerin sabit bir yerleşim kuralı olduğunu varsaymıyoruz; yalnızca mevcut tahtadaki yakınlığı puanlıyoruz.
+Gelecek ödülün ağırlığıdır. Ajan sadece hemen yanındaki ödüle değil, sonraki hareketlerde beklenen ödüle de değer verir. Örneğin yeni durumun en iyi Q değeri 0,4 ise bunun hedefe katkısı `0,9 × 0,4 = 0,36` olur.
 
-### Seed neden önemli?
+### Sayısal örnek: yeşil topladık
 
-Rastgele başlangıçların tekrar üretilebilir olmasını sağlar. Aynı seed bütün yöntemlere verilince yiyecekler, başlangıç konumları ve hızlar aynı olur. Böylece algoritmaları daha adil karşılaştırabiliriz.
+Eski Q = 0,1; ödül = +1; yeni durumdaki en iyi Q = 0,4 olsun:
 
-### Seed 50’de hangi yöntem daha başarılıydı?
+```text
+Hedef = 1 + 0,9 × 0,4 = 1,36
+Hata  = 1,36 − 0,1 = 1,26
+Yeni Q = 0,1 + 0,2 × 1,26 = 0,352
+```
 
-30. yöntem bölümündeki kayıtta A*, Dijkstra ve Greedy 40 yeşilin tamamını aldı. A* 95, Dijkstra 96, Greedy 158 adım kullandı. Manhattan 39’da kaldı ve 4.000 adım sınırına ulaştı. Tek bir seed ve küçük örnek tüm olası tahtalar için kesin üstünlük kanıtlamaz.
+Ajan benzer durumu tekrar gördüğünde bu hareket artık 0,1 yerine 0,352 ile değerlendirilir.
 
-### Neden Manhattan başarısız oldu?
+### Sayısal örnek: kırmızı topladık
 
-Manhattan her adımda yakın çevreye göre yön seçer; bütün tahtada rota aramaz. Bazı durumlarda yerel seçimler hedefe ilerlemeyebilir. Bu davranış basit taban çizgisinin sınırlamasını gösteriyor; takılma tespiti eklemek bir sonraki geliştirme olabilir.
+Eski ve gelecek Q değerleri aynı, ödül −1 olsun:
 
-### Kırmızı yiyecek neden duvar değil?
+```text
+Hedef = −1 + 0,9 × 0,4 = −0,64
+Yeni Q = 0,1 + 0,2 × (−0,64 − 0,1) = −0,048
+```
 
-Ödev kırmızıdan kaçınmayı istiyor ama kırmızıyı engel ilan etmiyor. Bu yüzden kırmızı hücreyi tamamen yasaklamak yerine rota maliyetini yükseltiyoruz. Yol yoksa kırmızıya basmak mümkün kalıyor; bu durumda −1 ödül uygulanıyor.
+Bu hareketin tercih edilirliği düşer. Birkaç benzer deneyimden sonra kırmızıya giden kararın değeri daha da değişebilir.
 
-### Çarpışmada sola hareket kuralı nasıl uygulanıyor?
+### Bölüm bittiğinde ne değişir?
 
-Aynı yeşil hücreye aynı simülasyon adımında girenler arasından sol eylemini kullanan seçiliyor. Birden fazla sol varsa düşük numaralı ajan kazanıyor. Sol kullanan yoksa yine düşük numaralı ajan seçiliyor. Böylece sonuç her çalıştırmada aynı şekilde belirleniyor.
+Bitmiş bölümün devamından ödül gelmez. Bu yüzden `future = 0` kullanırız. Son yeşili alan ajanın eski Q değeri 0,1 ise:
 
-### Bu bir sinir ağı mı?
+```text
+Hedef = 1
+Yeni Q = 0,1 + 0,2 × (1 − 0,1) = 0,28
+```
 
-Hayır. Bu proje standart kütüphaneyle yazılmış tabular Q-learning kullanıyor. Öğrenilmiş Q değerlerini doğrudan JSON’da saklıyoruz; sinir ağı, Unity veya ML-Agents bağımlılığı yok.
+4.000 adım sınırına gelmek de bizim bölüm tanımımızda bitiştir; o adımda gelecek Q eklemeyiz.
 
-### Sonuçlardan neyi kesin söyleyebiliriz?
+### Kodda karşılığı
 
-Seed 42’deki kolay deneylerde tüm yöntemler üst ödüle ulaştı, bu yüzden orada ödül farkı ayırt edici değildi. Zor seed 50’de rota yöntemleri Manhattan’dan daha iyi sonuç verdi. Ölçümler kod düzeltmeleri ve öğrenme birlikte ilerlerken toplandığı için gelişmenin ne kadarının sadece öğrenmeden geldiğini ayıramayız.
+`LearningMemory.learn()`:
 
-## 15. Sözlü anlatım için kısa sunum metni
+```python
+old = values[action]
+future = 0.0 if terminal else max(next_values)
+target = reward + GAMMA * future
+values[action] += ALPHA * (target - old)
+self.visits[key][action] += 1
+```
 
-“Ödevdeki 50’ye 50 tahtayı Python ile simüle ettim. Her bölümde üç ajan, eşit sayıda rastgele yeşil ve kırmızı yiyecek, rastgele 1–3 hücre hızı ve Manhattan veya Öklid ile seçilen en yakın rakip gözlemi bulunuyor. Yiyecekleri görebiliyorlar ama diğer ajanların hepsini göremiyorlar.
+Arayüzdeki son Q hesabı bu fonksiyonun döndürdüğü gerçek değerlerden gelir. Örnek bir animasyon veya uydurulmuş öğrenme göstergesi değildir. Bu sürümde uygunluk izi, ek yol araması veya ikinci öğrenme yöntemi yoktur.
 
-Kararları karşılaştırmak için A*, Dijkstra, Greedy Best-First ve Manhattan yöntemlerini ekledim. A* rota maliyetiyle hedef kestirimini birleştiriyor, Dijkstra yalnızca rota maliyetine bakıyor, Greedy hedefe yakınlığı önceleyip Manhattan ise aramasız yerel karar veriyor. Kırmızı yiyeceği duvar yapmak yerine maliyetini artırdım. Ajanın 1–3 hücrelik hızını da rota aramasında modelledim.
+## 18. Bir simülasyon adımının tamamı
 
-Ayrıca her ajan ve algoritma için ayrı Q tablosu tuttum. Hareketlerden gelen ödüller Q-learning ve eligibility trace ile önceki kararlara aktarılıyor. Başarıya göre keşif olasılığı uyarlanıyor. Öğrenme belleği JSON’a, bölüm ölçümleri CSV’ye kaydediliyor.
+`Simulation.step()` programın ana akışıdır:
 
-Toplam 120 bölüm çalıştırdım. Zor seed 50’de A*, Dijkstra ve Greedy bütün 40 yeşili topladı; Manhattan bir yiyecekte takıldı. Bu sonuçlar karşılaştırma sağlıyor ama kod iyileştirmeleriyle öğrenme birlikte yapıldığı için farkı yalnız öğrenmeye bağlamıyorum.”
+1. Her ajan için mevcut tahtadan gözlem ve durum değerleri hazırlanır.
+2. Her ajan Q değerleri ve ε ile bir eylem seçer.
+3. Bütün eylemler `move()` ile eşzamanlı mikro-adımlar halinde yürütülür.
+4. Her ajanın kendi ödülü alınır.
+5. Yeşillerin bitip bitmediği ve adım sınırı kontrol edilir.
+6. Her ajanın hareket sonrası durumu hesaplanır ve kendi Q satırı güncellenir.
+7. Bölüm bitmediyse sonraki adım beklenir.
+8. Bölüm bittiyse sonuç geçmişe eklenir, sayaç artar ve yeni tahta oluşturulur.
+
+İlk üç ajanın kararını aynı eski tahtaya göre hazırlamak önemlidir. Ajan 1'i hareket ettirip sonra ajan 2'ye karar verdirseydik ikinci ajan ilk ajanın henüz yaptığı hareketi görmüş olurdu; eşzamanlı karar düzeni bozulurdu.
+
+### Tek hareketi baştan sona izleyelim
+
+Ajan 1 `(4, 5)` konumunda, hızı 2, son yeşil `(6, 5)` hücresinde olsun. Diğer ajanlar bu yiyeceğe aynı anda ulaşmasın. Eylem seçiminin sağ olduğunu varsayalım; keşif varsa başka hareket de seçilebilir.
+
+- Hedef sağdadır; yeni bir durumsa sağın başlangıç Q değeri +0,1 olabilir.
+- Ajan önce `(5, 5)`, sonra `(6, 5)` hücresine gider.
+- Yeşil silinir; yalnızca ajan 1 +1 alır.
+- Tahtada yeşil kalmadığı için bölüm biter.
+- Gelecek Q sıfır alınır; başlangıç 0,1 ise yeni Q 0,28 olur.
+- Diğer ajanların o adımdaki ödülü 0'dır; kendi eylem satırları kendi sonuçlarıyla güncellenir.
+- Bölüm sonucu belleğin geçmiş listesine eklenir ve yeni tahta hazırlanır.
+
+Yeni bölüm açılırken Q tablosu sıfırlanmaz. **Tahta değişir, öğrenilmiş deneyim kalır.**
+
+## 19. Öğrenme JSON'a nasıl kaydediliyor?
+
+**JSON**, sözlük ve listeleri metin biçiminde saklamanın yaygın bir yoludur. Python nesneleri uygulama kapanınca kaybolur; dosyaya yazarsak sonraki çalıştırmada geri alabiliriz.
+
+`LearningMemory.save()` şu verileri saklar:
+
+| Alan | İçerik |
+|---|---|
+| `version` | Dosya biçiminin sürümü |
+| `episodes` | Tamamlanan bölüm sayısı |
+| `q_values` | Ajanlara ait durum-eylem değerleri |
+| `visits` | Durum-eylem güncelleme sayıları |
+| `history` | Tamamlanan bütün bölümlerin parametre ve sonuçları |
+
+Bir geçmiş satırında tarih, bölüm numarası, her renkten yiyecek sayısı, başlangıç seed değeri, seçilen uzaklık ölçüsü, kullanılan α/γ/ε, adım sayısı, toplam yeşil/kırmızı/ödül ve üç ajanın ayrı hızları ile skorları vardır.
+
+JSON içindeki Q listelerinde hangi indeksin hangi harekete ait olduğu `ACTIONS` sırasıyla belirlenir. `/api/memory` görünümü bu eylem isimlerini ve geçerli katsayıları da döndürür.
+
+### Neden her adımın bütün tahtasını kaydetmedik?
+
+Öğrenmeyi sürdürmek için güncel Q değerleri ve ziyaret sayıları yeterlidir. Her adımın tüm konumlarını kaydetmek çok daha fazla veri üretirdi. Bu yüzden:
+
+- Q tablosu her simülasyon adımında bellekte güncellenir.
+- Arayüz son adımın gerçek hesaplamasını gösterir.
+- Bütün tamamlanmış bölümlerin sonuçları tarihçede saklanır.
+- Her adımın önceki Q sürümü ve tahta görüntüsü ayrı ayrı arşivlenmez.
+
+### Dosyanın yarım yazılmasını nasıl önlüyoruz?
+
+Önce `learning_memory.json.tmp` yazılır, sonra asıl dosyayla değiştirilir:
+
+```python
+temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+temporary.replace(path)
+```
+
+`indent=2`, dosyayı satır ve girintilerle okunabilir yapar. `ensure_ascii=False`, Türkçe karakterlerin okunur kalmasını sağlar. Geçici dosya kullanımı, asıl dosyanın içeriğinin yazım sırasında yarım kalma riskini azaltır.
+
+Kaydetme; bölüm sonunda, duraklatınca, yeni bölüm düğmesine basınca ve terminalde Ctrl+C ile çıkarken yapılır. İşlem zorla sonlandırılırsa son kayıttan sonraki güncellemeler kaybolabilir. Bu, her adımda diske yazmamanın sonucudur.
+
+`LearningMemory.load()` dosya varsa okur; yoksa boş bellekle başlar. Dosya bozuksa veya sürümü desteklenmiyorsa hata verir; sessizce öğrenmeyi sıfırlamaz.
+
+Önceki uygulamanın `agent_memory.json` ve `training_results.csv` dosyalarına dokunmadık. Eski biçim farklı olduğu için yeni sürüm `learning_memory.json` kullanır; eski verileri yeni deney yapılmış gibi göstermiyoruz. Yeni dosya yerel çalışma verisi olduğu için `.gitignore` içinde tutulur.
+
+### Seed kaydını doğru yorumlayalım
+
+Seed rastgele sayı üreticisinin **başlangıç** değeridir. Tek bir `Simulation` nesnesiyle arka arkaya otomatik bölümler çalıştırılırsa üretici kaldığı yerden devam eder. Bu nedenle geçmişte aynı başlangıç seed değerinin görünmesi, otomatik bölümlerin aynı tahta olduğu anlamına gelmez.
+
+Aşağıdaki kontrollü 30 bölümlük denemede ise her bölüm için yeni bir `Simulation` oluşturuldu. Böylece aynı seed yeniden verildiğinde aynı başlangıç tahtası, hızlar ve ölçü tekrar üretildi. Uygulamadaki varsayılan rastgele başlangıçta seed alanı `null` olur; HTML bunu “Rastgele” gösterir.
+
+## 20. Python ile HTML nasıl konuşuyor?
+
+Tarayıcı Python fonksiyonunu doğrudan çağıramaz. `app.py`, yalnızca bu bilgisayardaki `127.0.0.1` adresinde küçük bir **HTTP sunucusu** açar. HTTP, tarayıcının bir adrese istek gönderip cevap alması için kullanılan iletişim biçimidir.
+
+**API**, HTML'in kullanabildiği adresler ve veri kurallarıdır:
+
+| Adres | Yöntem | İşlev |
+|---|---|---|
+| `/` | GET | HTML sayfasını getirir |
+| `/api/state` | GET | Geçerli tahtayı ve istatistikleri verir |
+| `/api/tick` | POST | Çalışıyorsa 1–20 simülasyon adımı yürütür |
+| `/api/control` | POST | Başlat, duraklat veya ayarları uygulayıp yeni bölüm aç |
+| `/api/memory` | GET | Güncel Q belleğini, ziyaretleri ve geçmişi JSON olarak verir |
+
+GET veri istemek, POST burada bir işlem istemek için kullanılır. Örneğin HTML şu isteği gönderir:
+
+```json
+{"action": "new_episode", "food_pairs": 40}
+```
+
+`app.py` içindeki `Handler.control()` bunu doğrular, mevcut öğrenmeyi kaydeder, yiyecek sayısını değiştirir ve `new_episode()` çağırır. Cevapta yeni tahta döner.
+
+`integer()` tam sayı ve sınır kontrolünü tek yerde yapar. `12.5`, `true`, `"12"`, 0 veya 376 yiyecek sayısı olarak kabul edilmez. HTML sayı kutusu hatalı girişleri önler; sunucu da aynı sınırları ayrıca denetler. Çünkü tarayıcı dışından da API isteği gönderilebilir.
+
+`main()` uygulama girişidir: komut satırı ayarlarını okur, JSON belleğini yükler, simülasyonu ve sunucuyu oluşturur, tarayıcıyı açar. Ctrl+C alındığında belleği kaydedip sunucuyu kapatır.
+
+## 21. HTML tarafında hangi kod ne yapıyor?
+
+`index.html` üç bölümden oluşur:
+
+- **HTML:** Düğmelerin, kutuların, tablonun ve çizim alanının yapısı.
+- **CSS:** Renkler, boyutlar, kolonlar ve dar ekrana uyum.
+- **JavaScript:** Sunucuyla iletişim, çizim ve ekrandaki değerleri güncelleme.
+
+### `request()`
+
+`fetch()` ile HTTP isteği gönderir; cevabı JSON olarak okur. Sunucu hata bildirdiyse kullanıcıya gösterilecek bir hata oluşturur.
+
+### `update()`
+
+İstekleri bir Promise zincirine ekler. **Promise**, ileride tamamlanacak bir işlemin sonucunu temsil eder. Burada zinciri, bir isteğin cevabı işlenmeden sonraki isteği başlatmamak için kullanıyoruz.
+
+Bu sıra önemlidir: eski bir adım isteğinin cevabı, yeni bölüm isteğinden sonra gelip eski tahtayı yeniden çizmemelidir. Yenileme ve kontrol istekleri aynı sırayı paylaşır.
+
+### `control()`
+
+Bir kontrol isteği sürerken düğmeleri geçici olarak devre dışı bırakır. İstek bittiğinde yeniden açar. Yeni bölüm isteğinde kullanıcı kutudaki taslak yiyecek sayısını gönderir.
+
+### `render()`
+
+Sunucudan gelen durumu metinlere ve tabloya dönüştürür. Skorları tarayıcıda yeniden hesaplamak yerine Python'daki gerçek değerleri gösterir. Son öğrenme adımının eski/yeni Q değerleri de burada yazılır.
+
+Eğitim geçmişi, yeni bir sonuç eklendiğinde yeniden oluşturulur. Her satırda parametreler ve üç ajanın kendi ödül/hız bilgisi bulunur. Toplam puan bütün ajanların ödüllerinin toplamıdır.
+
+Aynı yiyecek sayısında en az 20 tamamlanmış bölüm varsa ilk 10 ve son 10 bölümün ortalama toplam ödülü gösterilir. Farklı sayıda yiyecekle alınan ham skorları doğrudan karşılaştırmamak için bu özette geçerli yiyecek sayısıyla eşleşen kayıtlar kullanılır. Bu küçük özet kontrollü bilimsel deney yerine geçmez.
+
+### `draw()` ve Canvas
+
+**Canvas**, JavaScript ile çizim yaptığımız HTML alanıdır. İç çözünürlük 600 × 600, tahta 50 × 50 olduğu için hücre boyutu `600 / 50 = 12` pikseldir.
+
+Bir hücrenin merkezini:
+
+```javascript
+const x = (agent.x + 0.5) * cell;
+const y = (agent.y + 0.5) * cell;
+```
+
+ile buluruz. `0.5` hücrenin sol üst köşesinden merkezine geçer. Yeşiller daire, kırmızılar kare ve ajanlar numaralı renkli daire olarak çizilir. Kesikli çizgiler, Python'dan gelen tek en yakın rakip koordinatını gösterir.
+
+### Eğitim hızı ile ajan hızı farklıdır
+
+Tarayıcı yaklaşık 100 milisaniyede bir yenileme denemesi yapar. Kaydırıcı, bir istekte kaç simülasyon adımı çalıştırılacağını belirler. Önceki istek sürüyorsa yenisini biriktirmez.
+
+Ajan hızı ise tek bir simülasyon adımında kaç hücre ilerleyebildiğidir: 1, 2 veya 3. Kaydırıcı bunu değiştirmez. Gerçek eğitim hızı hesaplama süresine ve tarayıcının zamanlayıcısına bağlıdır; sabit bir saniyelik adım garantisi yoktur. Tarayıcı sekmesi kapalıyken yeni tick gelmez, dolayısıyla bu tasarımda simülasyon ilerlemez.
+
+## 22. İlk bildirilen ayar hatası neydi, nasıl düzelttik?
+
+Eski HTML, yiyecek kutusu odakta değilken her yenilemede sunucunun eski değerini kutuya geri yazıyordu. Örneğin kullanıcı 125'i 40 yapıp başka bir alana tıkladığında, sonraki yenileme tekrar 125 yazabiliyordu. Yeni bölüm isteği de yanlışlıkla 125 gönderiyordu.
+
+Şimdi kutuyu yalnızca ilk durum yüklemesinde sunucudan dolduruyoruz:
+
+```javascript
+if (!latest) foodInput.value = data.food_pairs;
+```
+
+Sonraki yenilemeler kullanıcının henüz uygulamadığı taslağı bozmaz. “Uygula / Yeni bölüm” açıkça bu değeri gönderir. Canlı durumdaki “Uygulanan yiyecek sayısı” satırı gerçekten kullanılan sayıyı gösterir.
+
+Ayrıca ilk durum isteğini, otomatik adımları ve kontrol isteklerini aynı kuyruğa aldık. Böylece ayar uygulama ile eski cevapların çizilmesi arasındaki sıralama sorunu giderildi.
+
+## 23. Zaman içinde gerçekten ne değişti? Çalıştırılan 30 bölüm
+
+Bu sürüm hazırlanırken gerçek simülasyon çalıştırıldı; aşağıdaki değerler tahmin veya örnek veri değildir. Yeni `learning_memory.json` bu 30 bölümün Q belleğini ve bütün sonuçlarını içerir.
+
+Deney düzeni:
+
+- Her bölümde 40 yeşil, 40 kırmızı yiyecek.
+- α = 0,20 ve γ = 0,90 sabit.
+- Başlangıç seed değerleri 42–51, aynı sırayla üç defa kullanıldı.
+- Her bölüm için aynı öğrenme belleğini kullanan yeni `Simulation` oluşturuldu.
+- Böylece her 10 bölümlük grupta aynı başlangıç tahtaları, hızlar ve uzaklık ölçüleri kullanıldı; Q belleği sıfırlanmadı.
+- Keşif oranı tamamlanan bölüm sayısına göre normal biçimde azaldı.
+
+| Grup | Ortalama yeşil | Ortalama kırmızı | Ortalama ödül | Ortalama adım | Bütün yeşilleri alan bölüm |
+|---|---:|---:|---:|---:|---:|
+| 1–10 | 40 | 3,3 | 36,7 | 376,9 | 10 / 10 |
+| 11–20 | 40 | 2,9 | 37,1 | 447,4 | 10 / 10 |
+| 21–30 | 40 | 2,7 | 37,3 | 386,1 | 10 / 10 |
+
+Ajanların ayrı ortalama ödülleri:
+
+| Ajan | İlk 10 bölüm | Son 10 bölüm |
+|---|---:|---:|
+| 1 | 11,6 | 12,2 |
+| 2 | 12,5 | 13,6 |
+| 3 | 12,6 | 11,5 |
+
+### Bu sonucu nasıl okuyalım?
+
+Toplam ortalama ödül 0,6 arttı ve kırmızı ortalaması 0,6 azaldı. Buna karşılık adım sayısı düzenli azalmadı; ajan 3'ün ortalama kişisel ödülü de düştü. Ortak yiyecekler için rekabet edildiğinden takım toplamındaki artış her ajana aynı şekilde yansımaz.
+
+İlk 10 bölümde kullanılan ε yaklaşık 0,2000–0,1520; son 10 bölümde 0,1088–0,0827 aralığındaydı. Hem Q değerleri hem keşif davranışı değişti. Bu yüzden küçük farkın tamamını yalnızca Q tablosunun daha iyi olmasına bağlayamayız. Öğrenme kapalı bir kontrol grubu ve çok daha fazla tekrar olmadan kesin nedensel sonuç çıkaramayız.
+
+Somut olarak söyleyebildiğimiz: **36.312 gerçek ajan güncellemesi yapıldı, bellekte 554 durum satırı oluştu ve bu denemede sonraki gruplar ortalamada daha az kırmızı topladı.** Bu, bütün yeni tahtalarda sürekli iyileşme veya en iyi politika garantisi değildir.
+
+HTML'de bu geçmiş kayıtlarını görebilir, eğitimi sürdürerek yeni bölümlerin aynı listeye eklendiğini izleyebilirsiniz. Başka yiyecek sayısına geçerseniz her satır kendi parametresini korur.
+
+## 24. Neleri bilinçli olarak basit bıraktık?
+
+- Tek öğrenme yöntemi Q-learning'dir; rota algoritması kıyası ve sinir ağı yoktur.
+- α ve γ sabittir. ε bölüm sayısıyla azalır. Kullanıcıya onlarca ayar eklenmez.
+- Yiyecekler rastgele dağıtılır; gizli bir yerleşim örüntüsü varmış gibi davranılmaz.
+- Durum tablosu bütün tahtayı içermez; belleği küçük tutmak için bilgi kaybı kabul edilir.
+- Öklid yalnızca yakın rakip ölçüsüdür; hiçbir yerde çapraz hareket yoktur.
+- 4.000 adım sınırı, takılan bölümün sonsuza kadar sürmesini engelleyen uygulama kararıdır; ödevde verilmiş bir sayı değildir.
+- Ajan, yiyecek veya sınırda erken durur. Kırmızı yiyecek bir duvar değildir; alınabilir ve −1 ödül verir.
+- Aynı hücrede ajan bulunması yasaklanmaz. Ödevde yalnızca yiyecek rekabetinin sonucu tanımlanmıştır.
+- Bellek kalıcıdır; tahtanın tam kaldığı yer kaydedilmez. Uygulama tekrar açılınca yeni tahta kurulur.
+
+## 25. Kodu hangi sırayla okuyayım?
+
+Önce `simulation.py` içindeki `ACTIONS` ve `DELTAS`, sonra `Agent`, `Observation`, `new_episode()`, `observation_for()`, `project()` ve `move()` ile ortam kurallarını anlayın. Ardından `state_values()`, `choose_action()` ve `LearningMemory.learn()` ile öğrenmeyi okuyun. Son olarak `step()` içinde bunların nasıl birleştiğini izleyin.
+
+Daha sonra `app.py` içindeki `main()`, `make_handler()`, `state()`, `do_POST()` ve `control()` ile web bağlantısına geçin. En son `index.html` içindeki `request()`, `update()`, `control()`, `render()` ve `draw()` fonksiyonlarını okuyun.
+
+Böylece ekrandaki düğmeden Q güncellemesine kadar zinciri takip edebilirsiniz:
+
+```text
+HTML düğmesi / zamanlayıcı
+    → HTTP isteği
+    → app.py doğrulaması
+    → Simulation.step()
+    → gözlem → eylem → hareket → kişisel ödül
+    → Q tablosunun güncellenmesi
+    → bölüm bittiyse geçmiş ve JSON kaydı
+    → HTTP cevabı
+    → HTML metinleri ve tahtanın yeniden çizilmesi
+```
+
+Projeyi kendi cümlenizle anlatırken bu sırayı kullanabilirsiniz: “Önce kurallara uygun rastgele tahta kuruyorum. Her ajana yalnızca izin verilen gözlemi veriyorum. Gözlemi küçük bir duruma çevirip Q tablosuyla hareket seçtiriyorum. Eşzamanlı hareketten sonra yiyecekleri ve kişisel ödülleri çözüyorum. Sonuçla ilgili Q değerini güncelliyorum. Deneyim JSON'da kalıyor; HTML'den hem hareketleri hem geçmiş sonuçları izliyorum.”
