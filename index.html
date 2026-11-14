@@ -5,142 +5,106 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>BIL353 | Yiyecek Toplama</title>
   <style>
-    :root { color-scheme: light; font-family: "Segoe UI", Arial, sans-serif; color: #0f172a; background: #f1f5f9; }
+    :root { font-family: "Segoe UI", Arial, sans-serif; color: #0f172a; background: #f1f5f9; }
     * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; }
-    .layout { display: grid; grid-template-columns: minmax(420px, 650px) minmax(290px, 350px); gap: 22px; max-width: 1060px; margin: 0 auto; padding: 22px; }
-    .card { background: white; border: 1px solid #dbe3ee; border-radius: 14px; box-shadow: 0 8px 24px #0f172a0a; }
-    .board-card { padding: 18px; }
-    header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+    body { margin: 0; }
+    main { display: grid; grid-template-columns: minmax(0, 650px) minmax(280px, 350px); gap: 20px; max-width: 1060px; margin: auto; padding: 20px; }
+    .card { background: white; border: 1px solid #dbe3ee; border-radius: 12px; padding: 16px; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
     h1 { margin: 0; font-size: 20px; }
-    .subtitle { margin: 5px 0 0; color: #64748b; font-size: 13px; }
-    .badge { padding: 6px 10px; border-radius: 999px; background: #eff6ff; color: #1d4ed8; font-size: 12px; white-space: nowrap; }
-    canvas { display: block; width: 100%; height: auto; aspect-ratio: 1; border: 1px solid #cbd5e1; border-radius: 6px; background: #f8fafc; }
-    aside { display: flex; flex-direction: column; gap: 14px; }
-    .panel { padding: 16px; }
-    h2 { margin: 0 0 12px; font-size: 15px; }
+    h2, summary { margin: 0 0 12px; font-size: 15px; font-weight: 600; }
+    summary { cursor: pointer; }
+    p, label { color: #475569; font-size: 13px; line-height: 1.5; }
+    #status { font-size: 12px; white-space: nowrap; color: #1d4ed8; }
+    canvas { display: block; width: 100%; aspect-ratio: 1; border: 1px solid #cbd5e1; background: #f8fafc; }
+    aside { display: flex; flex-direction: column; gap: 16px; }
     .buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    button { min-height: 38px; border: 0; border-radius: 8px; background: #2563eb; color: white; font: inherit; font-weight: 600; cursor: pointer; }
+    button { min-height: 40px; border: 0; border-radius: 7px; background: #2563eb; color: white; font: inherit; font-size: 13px; cursor: pointer; }
     button:hover { background: #1d4ed8; }
-    button.secondary { background: #e2e8f0; color: #0f172a; }
-    button.secondary:hover { background: #cbd5e1; }
-    label { display: block; margin: 12px 0 6px; color: #475569; font-size: 13px; }
-    input[type=number] { width: 100%; height: 36px; padding: 6px 9px; border: 1px solid #cbd5e1; border-radius: 7px; font: inherit; }
-    input[type=range] { width: 100%; accent-color: #2563eb; }
-    select { width: 100%; height: 36px; padding: 5px 8px; border: 1px solid #cbd5e1; border-radius: 7px; background: white; font: inherit; }
-    .table-wrap { overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; font-size: 11px; }
-    th, td { padding: 6px 4px; border-bottom: 1px solid #e2e8f0; text-align: right; white-space: nowrap; }
+    button:disabled { opacity: .55; cursor: wait; }
+    label { display: block; margin: 12px 0 6px; }
+    input[type=number] { width: 100%; height: 36px; padding: 6px 9px; border: 1px solid #94a3b8; border-radius: 6px; font: inherit; }
+    input[type=range] { width: 100%; }
+    pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.65 Consolas, monospace; }
+    .legend { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 12px; font-size: 12px; color: #475569; }
+    .mark { display: inline-block; width: 10px; height: 10px; margin-right: 5px; border-radius: 50%; }
+    #error { min-height: 18px; color: #b91c1c; }
+    .history { grid-column: 1 / -1; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: right; padding: 8px; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
     th:first-child, td:first-child { text-align: left; }
-    #performance-chart { width: 100%; height: auto; margin: 8px 0; border: 0; }
-    .range-line { display: flex; justify-content: space-between; align-items: center; }
-    .range-line output { color: #1d4ed8; font-weight: 700; }
-    pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.65 Consolas, "Courier New", monospace; color: #1e293b; }
-    .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 9px 12px; margin-top: 14px; color: #475569; font-size: 12px; }
-    .dot, .square { display: inline-block; width: 10px; height: 10px; margin-right: 6px; vertical-align: -1px; }
-    .dot { border-radius: 50%; }
-    .green { background: #22c55e; } .red { background: #ef4444; }
-    .blue { background: #2563eb; } .purple { background: #7c3aed; } .orange { background: #f97316; }
-    .square { background: #ef4444; }
-    .note { color: #64748b; font-size: 12px; line-height: 1.5; }
-    #error { min-height: 18px; margin: 10px 0 0; color: #b91c1c; font-size: 12px; }
-    @media (max-width: 820px) {
-      .layout { grid-template-columns: 1fr; max-width: 700px; padding: 12px; }
-    }
+    a { color: #1d4ed8; }
+    @media (max-width: 820px) { main { grid-template-columns: 1fr; max-width: 700px; padding: 12px; } }
   </style>
 </head>
 <body>
-  <main class="layout">
-    <section class="card board-card">
-      <header>
-        <div>
-          <h1>BIL353 Yiyecek Toplama</h1>
-          <p class="subtitle">Üç ajan · dört yol bulma yöntemi · kalıcı Q-öğrenme</p>
-        </div>
-        <span class="badge" id="status">Bağlanıyor…</span>
-      </header>
-      <canvas id="board" width="600" height="600" aria-label="50 x 50 simülasyon tahtası"></canvas>
+  <main>
+    <section class="card">
+      <header><h1>BIL353 Yiyecek Toplama</h1><span id="status" role="status">Bağlanıyor…</span></header>
+      <canvas id="board" width="600" height="600" aria-label="50 × 50 simülasyon tahtası"></canvas>
       <div class="legend">
-        <span><i class="dot green"></i>Yeşil yiyecek (+1)</span>
-        <span><i class="square"></i>Kırmızı yiyecek (−1)</span>
-        <span><i class="dot blue"></i>Ajan 1</span>
-        <span><i class="dot purple"></i>Ajan 2</span>
-        <span><i class="dot orange"></i>Ajan 3</span>
+        <span><i class="mark" style="background:#22c55e"></i>Yeşil (+1)</span>
+        <span><i class="mark" style="background:#ef4444;border-radius:0"></i>Kırmızı (−1)</span>
+        <span><i class="mark" style="background:#2563eb"></i>Ajan 1</span>
+        <span><i class="mark" style="background:#7c3aed"></i>Ajan 2</span>
+        <span><i class="mark" style="background:#f97316"></i>Ajan 3</span>
       </div>
+      <p>Kesikli çizgi, ajanın görebildiği en yakın rakibi gösterir. Hareketler yalnızca yukarı, aşağı, sola ve sağadır; eylemsiz kalmak da mümkündür.</p>
     </section>
-
     <aside>
-      <section class="card panel">
+      <section class="card">
         <h2>Kontroller</h2>
         <div class="buttons">
-          <button id="toggle">Başlat</button>
-          <button id="new-episode" class="secondary">Yeni bölüm</button>
+          <button id="toggle" type="button" disabled>Başlat</button>
+          <button id="new-episode" type="submit" form="settings" disabled>Uygula / Yeni bölüm</button>
         </div>
-        <label for="food-pairs">Her renkten yiyecek sayısı (1–375)</label>
-        <input id="food-pairs" type="number" min="1" max="375" value="125">
-        <label for="algorithm">Ajanın yol bulma algoritması</label>
-        <select id="algorithm">
-          <option>A*</option>
-          <option>Dijkstra</option>
-          <option>Greedy Best-First</option>
-          <option>Manhattan</option>
-        </select>
-        <label for="steps">Arayüz yenilemesi başına adım</label>
-        <div class="range-line">
-          <input id="steps" type="range" min="1" max="20" value="3">
-          <output id="steps-value">3</output>
-        </div>
-        <p id="error" role="status"></p>
+        <form id="settings">
+          <label for="food-pairs">Her renkten yiyecek sayısı (1–375)</label>
+          <input id="food-pairs" type="number" min="1" max="375" step="1" value="125" required>
+          <p>Yiyecek sayısını değiştirdikten sonra “Uygula / Yeni bölüm”e basın. Tahta yenilenir; öğrenilen değerler korunur.</p>
+        </form>
+        <label for="steps">Yenileme başına adım: <output id="steps-value">3</output></label>
+        <input id="steps" type="range" min="1" max="20" value="3">
+        <p id="error" role="alert"></p>
       </section>
-
-      <section class="card panel">
+      <section class="card">
         <h2>Canlı durum</h2>
         <pre id="stats">Yükleniyor…</pre>
       </section>
-
-      <section class="card panel">
-        <h2>Algoritma karşılaştırması</h2>
-        <p class="note">Tablo son 10 bölümün ortalamasını gösterir. Grafik, her yöntemin bölüm ödülünü zaman içinde izler.</p>
-        <canvas id="performance-chart" width="600" height="220" aria-label="Algoritmalara göre bölüm ödülü grafiği"></canvas>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Algoritma</th><th>Bölüm</th><th>Yeşil</th><th>Kırmızı</th><th>Ödül</th><th>Plan ms</th></tr></thead>
-            <tbody id="performance-table"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="card panel">
-        <h2>Nasıl çalışır?</h2>
-        <p class="note">Ajanlar tüm yiyecekleri, yalnızca en yakın rakibin konumunu görür. A*, Dijkstra, Greedy Best-First veya Manhattan yöntemini yeni bölüm başında seçebilirsiniz. Her yöntemin Q tablosu ve keşif oranı ayrıdır; sonuçlar agent_memory.json ile training_results.csv dosyalarına kaydedilir.</p>
-        <p class="note">Simülasyon yalnızca bu bilgisayarda, Python'ın açtığı yerel sayfada çalışır. Sunucuyu kapatmak için terminalde Ctrl+C tuşlayın.</p>
-      </section>
+      <details class="card">
+        <summary>Öğrenme nasıl değişiyor?</summary>
+        <p>Her ajan kendi Q tablosunu günceller. Aşağıda son adımın gerçek değerleri gösterilir. Öğrenme her bölümde daha iyi sonuç garantilemez.</p>
+        <pre id="learning"></pre>
+        <p><a href="/api/memory" target="_blank" rel="noopener">Tüm öğrenme belleğini JSON olarak aç</a></p>
+      </details>
     </aside>
+    <section class="card history">
+      <h2>Eğitim geçmişi</h2>
+      <p>Bütün tamamlanan bölümler JSON'a kaydedilir. En yeni sonuç üsttedir. Bölüm, yeşiller bitince veya 4.000 adımda sona erer. α öğrenme oranı, γ gelecek ödül ağırlığı, ε keşif oranıdır.</p>
+      <p id="learning-progress"></p>
+      <table>
+        <thead><tr><th>Bölüm / zaman</th><th>Her renk</th><th>Başlangıç seed</th><th>Uzaklık</th><th>α</th><th>γ</th><th>ε</th><th>Adım</th><th>Yeşil</th><th>Kırmızı</th><th>Toplam ödül</th><th>Ajan 1 ödül / hız</th><th>Ajan 2 ödül / hız</th><th>Ajan 3 ödül / hız</th></tr></thead>
+        <tbody id="history"></tbody>
+      </table>
+    </section>
   </main>
-
   <script>
     const canvas = document.getElementById("board");
     const context = canvas.getContext("2d");
     const stats = document.getElementById("stats");
+    const learning = document.getElementById("learning");
     const statusBadge = document.getElementById("status");
     const toggleButton = document.getElementById("toggle");
+    const newButton = document.getElementById("new-episode");
     const foodInput = document.getElementById("food-pairs");
-    const algorithmInput = document.getElementById("algorithm");
-    const performanceCanvas = document.getElementById("performance-chart");
-    const performanceContext = performanceCanvas.getContext("2d");
-    const performanceTable = document.getElementById("performance-table");
-    const algorithmColors = {
-      "A*": "#2563eb",
-      "Dijkstra": "#16a34a",
-      "Greedy Best-First": "#7c3aed",
-      "Manhattan": "#f97316"
-    };
     const stepInput = document.getElementById("steps");
-    const stepOutput = document.getElementById("steps-value");
     const errorLabel = document.getElementById("error");
     const agentColors = ["#2563eb", "#7c3aed", "#f97316"];
     let latest = null;
-    let inFlight = false;
+    let pendingRequests = 0;
+    let controlPending = false;
+    let updates = Promise.resolve();
+    let historyLength = -1;
 
     async function request(path, data) {
       const response = await fetch(path, {
@@ -154,52 +118,40 @@
     }
 
     function draw(data) {
-      const size = data.board_size;
-      const cell = canvas.width / size;
+      const cell = canvas.width / data.board_size;
       context.clearRect(0, 0, canvas.width, canvas.height);
-      context.fillStyle = "#f8fafc";
-      context.fillRect(0, 0, canvas.width, canvas.height);
-
       context.strokeStyle = "#e2e8f0";
       context.lineWidth = 0.5;
-      for (let index = 0; index <= size; index += 1) {
-        const offset = index * cell;
+      for (let i = 0; i <= data.board_size; i += 1) {
         context.beginPath();
-        context.moveTo(offset, 0);
-        context.lineTo(offset, canvas.height);
-        context.moveTo(0, offset);
-        context.lineTo(canvas.width, offset);
+        context.moveTo(i * cell, 0);
+        context.lineTo(i * cell, canvas.height);
+        context.moveTo(0, i * cell);
+        context.lineTo(canvas.width, i * cell);
         context.stroke();
       }
-
       context.save();
       context.setLineDash([2, 4]);
-      context.strokeStyle = "#cbd5e1";
-      context.lineWidth = 1;
+      context.strokeStyle = "#94a3b8";
       for (const agent of data.agents) {
-        if (!agent.nearest) continue;
         context.beginPath();
-        context.moveTo((agent.x + 0.5) * cell, (agent.y + 0.5) * cell);
-        context.lineTo((agent.nearest[0] + 0.5) * cell, (agent.nearest[1] + 0.5) * cell);
+        context.moveTo((agent.x + .5) * cell, (agent.y + .5) * cell);
+        context.lineTo((agent.nearest[0] + .5) * cell, (agent.nearest[1] + .5) * cell);
         context.stroke();
       }
       context.restore();
-
-      for (const point of data.green_foods) {
+      for (const [x, y] of data.green_foods) {
         context.beginPath();
-        context.arc((point[0] + 0.5) * cell, (point[1] + 0.5) * cell, cell * 0.32, 0, Math.PI * 2);
+        context.arc((x + .5) * cell, (y + .5) * cell, cell * .32, 0, Math.PI * 2);
         context.fillStyle = "#22c55e";
         context.fill();
       }
-      for (const point of data.red_foods) {
-        context.fillStyle = "#ef4444";
-        context.fillRect(point[0] * cell + 2, point[1] * cell + 2, cell - 4, cell - 4);
-      }
+      context.fillStyle = "#ef4444";
+      for (const [x, y] of data.red_foods) context.fillRect(x * cell + 2, y * cell + 2, cell - 4, cell - 4);
       for (const agent of data.agents) {
-        const x = (agent.x + 0.5) * cell;
-        const y = (agent.y + 0.5) * cell;
+        const x = (agent.x + .5) * cell, y = (agent.y + .5) * cell;
         context.beginPath();
-        context.arc(x, y, cell * 0.43, 0, Math.PI * 2);
+        context.arc(x, y, cell * .43, 0, Math.PI * 2);
         context.fillStyle = agentColors[agent.id - 1];
         context.fill();
         context.strokeStyle = "white";
@@ -209,158 +161,102 @@
         context.font = "bold 8px Segoe UI, sans-serif";
         context.textAlign = "center";
         context.textBaseline = "middle";
-        context.fillText(String(agent.id), x, y);
+        context.fillText(agent.id, x, y);
       }
     }
 
     function render(data) {
+      // Initialize once: polling must not overwrite an unapplied user edit.
+      if (!latest) foodInput.value = data.food_pairs;
       latest = data;
       statusBadge.textContent = data.running ? "Çalışıyor" : "Duraklatıldı";
-      statusBadge.style.background = data.running ? "#dcfce7" : "#eff6ff";
-      statusBadge.style.color = data.running ? "#166534" : "#1d4ed8";
       toggleButton.textContent = data.running ? "Duraklat" : "Başlat";
-      if (document.activeElement !== foodInput) foodInput.value = data.food_pairs;
-      if (!algorithmInput.dataset.initialized) {
-        algorithmInput.value = data.algorithm;
-        algorithmInput.dataset.initialized = "true";
-      }
-      const average = data.average_reward.toFixed(2);
       const lines = [
-        "Algoritma: " + data.algorithm + " · bu yöntemde bölüm " + data.algorithm_episode,
-        "Toplam tamamlanan bölüm: " + data.completed_episodes,
-        "Adım: " + data.step.toLocaleString("tr-TR"),
-        "Mesafe ölçümü: " + data.metric,
-        "",
-        "Kalan yeşil: " + data.green_foods.length,
-        "Kalan kırmızı: " + data.red_foods.length,
-        "Bölüm ödülü: " + (data.total_reward > 0 ? "+" : "") + data.total_reward,
-        ""
+        "Bölüm: " + data.episode + " · adım: " + data.step,
+        "En yakın rakip: " + (data.metric === "Euclidean" ? "Öklid" : "Manhattan"),
+        "Uygulanan yiyecek sayısı: " + data.food_pairs + " / renk",
+        "Kalan yeşil: " + data.green_foods.length + " · kırmızı: " + data.red_foods.length, ""
       ];
       for (const agent of data.agents) {
-        lines.push("Ajan " + agent.id + "  hız " + agent.speed + "  konum " + agent.x + "," + agent.y);
-        lines.push("  yeşil " + agent.green + "  kırmızı " + agent.red + "  ödül " + (agent.reward > 0 ? "+" : "") + agent.reward);
+        lines.push("Ajan " + agent.id + " · hız " + agent.speed + " · ödül " + agent.reward);
+        lines.push("  yeşil " + agent.green + " · kırmızı " + agent.red);
       }
-      lines.push(
-        "",
-        "Tamamlanan bölüm: " + data.completed_episodes,
-        "Öğrenilen durum-eylem: " + data.learned_pairs.toLocaleString("tr-TR"),
-        "Keşif oranı (ε): " + data.epsilon.toFixed(3),
-        "Son 100 bölüm ort. ödülü: " + (data.average_reward > 0 ? "+" : "") + average
-      );
-      if (data.last_summary) {
-        lines.push(
-          "",
-          "Son bölüm: " + data.last_summary.green + " yeşil, " +
-            data.last_summary.red + " kırmızı, ödül " +
-            (data.last_summary.reward > 0 ? "+" : "") + data.last_summary.reward
-        );
-      }
+      lines.push("", "Tamamlanan bölüm: " + data.completed_episodes,
+        "Öğrenilen durum: " + data.learned_states,
+        "Q güncellemesi: " + data.updates,
+        "Keşif (ε): " + data.epsilon.toFixed(3));
       stats.textContent = lines.join("\n");
-      renderPerformance(data);
+      const details = ["α = " + data.alpha + " · γ = " + data.gamma,
+        "Q ← Q + α × (ödül + γ × gelecek Q − Q)", ""];
+      for (const row of data.last_updates) {
+        details.push("Ajan " + row.agent + " · " + row.action + " · ödül " + row.reward,
+          "Q: " + row.old_q.toFixed(3) + " → " + row.new_q.toFixed(3),
+          "Gelecek Q: " + row.future_q.toFixed(3) + " · hedef: " + row.target.toFixed(3), "");
+      }
+      learning.textContent = details.join("\n");
+      const comparable = data.history.filter(row => row.food_pairs === data.food_pairs);
+      const average = (rows, field) => rows.reduce((sum, row) => sum + row[field], 0) / rows.length;
+      document.getElementById("learning-progress").textContent = comparable.length >= 20
+        ? "Her renkten " + data.food_pairs + " yiyecekle ilk 10 / son 10 bölüm ortalama ödülü: " +
+          average(comparable.slice(0, 10), "reward").toFixed(1) + " / " +
+          average(comparable.slice(-10), "reward").toFixed(1) +
+          ". Rastgele tahtalar ve keşif de sonucu etkiler; bu fark tek başına öğrenme kanıtı değildir."
+        : "İlk / son 10 bölüm özeti için aynı yiyecek sayısında en az 20 bölüm gerekir.";
+      if (historyLength !== data.history.length) {
+        historyLength = data.history.length;
+        const body = document.getElementById("history");
+        body.replaceChildren();
+        for (const row of [...data.history].reverse()) {
+          const tr = document.createElement("tr");
+          const values = [row.episode + " · " + new Date(row.timestamp).toLocaleString("tr-TR"),
+            row.food_pairs, row.seed ?? "Rastgele", row.metric === "Euclidean" ? "Öklid" : "Manhattan",
+            row.alpha, row.gamma, row.epsilon.toFixed(3), row.steps, row.green, row.red, row.reward,
+            ...row.agents.map(agent => agent.reward + " / " + agent.speed)];
+          for (const value of values) {
+            const td = document.createElement("td");
+            td.textContent = value;
+            tr.appendChild(td);
+          }
+          body.appendChild(tr);
+        }
+      }
       draw(data);
     }
 
-    function renderPerformance(data) {
-      const names = data.algorithms;
-      const performance = data.performance;
-      performanceTable.innerHTML = names.map(function (name) {
-        const row = performance[name];
-        return "<tr><td><span style='color:" + algorithmColors[name] + "'>●</span> " + name +
-          "</td><td>" + row.episodes + "</td><td>" + row.avg_green.toFixed(1) +
-          "</td><td>" + row.avg_red.toFixed(1) + "</td><td>" +
-          (row.avg_reward > 0 ? "+" : "") + row.avg_reward.toFixed(1) +
-          "</td><td>" + row.avg_planning_ms.toFixed(1) + "</td></tr>";
-      }).join("");
-
-      const width = performanceCanvas.width;
-      const height = performanceCanvas.height;
-      const left = 38;
-      const right = width - 12;
-      const top = 12;
-      const bottom = height - 26;
-      const series = names.map(function (name) {
-        return {
-          name: name,
-          rows: data.history.filter(function (row) { return row.algorithm === name; }).slice(-40)
-        };
-      }).filter(function (item) { return item.rows.length > 0; });
-      performanceContext.clearRect(0, 0, width, height);
-      performanceContext.font = "11px Segoe UI, sans-serif";
-      performanceContext.strokeStyle = "#cbd5e1";
-      performanceContext.fillStyle = "#64748b";
-      performanceContext.beginPath();
-      performanceContext.moveTo(left, top);
-      performanceContext.lineTo(left, bottom);
-      performanceContext.lineTo(right, bottom);
-      performanceContext.stroke();
-      if (!series.length) {
-        performanceContext.fillText("Bölümler tamamlandıkça ödül çizgileri burada görünür.", left + 8, height / 2);
-        return;
-      }
-      const values = series.flatMap(function (item) {
-        return item.rows.map(function (row) { return Number(row.reward); });
-      });
-      const minimum = Math.min(0, ...values);
-      const maximum = Math.max(1, ...values);
-      const y = function (value) {
-        return bottom - ((value - minimum) / (maximum - minimum || 1)) * (bottom - top);
-      };
-      performanceContext.fillText(maximum.toFixed(0), 5, top + 4);
-      performanceContext.fillText(minimum.toFixed(0), 5, bottom);
-      for (const item of series) {
-        performanceContext.strokeStyle = algorithmColors[item.name];
-        performanceContext.lineWidth = 2;
-        performanceContext.beginPath();
-        item.rows.forEach(function (row, index) {
-          const x = left + (item.rows.length <= 1 ? 0 : index * (right - left) / (item.rows.length - 1));
-          if (index === 0) performanceContext.moveTo(x, y(Number(row.reward)));
-          else performanceContext.lineTo(x, y(Number(row.reward)));
-        });
-        performanceContext.stroke();
-      }
-      performanceContext.fillStyle = "#64748b";
-      performanceContext.fillText("Son 40 bölüm · toplam ödül", left, height - 7);
+    // All state-changing requests share one queue; old replies cannot undo a control.
+    function update(path, data) {
+      pendingRequests += 1;
+      updates = updates.then(() => request(path, data)).then(render)
+        .catch(error => { errorLabel.textContent = error.message; })
+        .finally(() => { pendingRequests -= 1; });
+      return updates;
     }
 
-    async function control(action) {
+    async function control(payload) {
+      if (controlPending || !latest) return;
+      controlPending = true;
+      toggleButton.disabled = newButton.disabled = foodInput.disabled = true;
       errorLabel.textContent = "";
-      const payload = { action: action };
-      if (action === "new_episode") {
-        payload.food_pairs = Number(foodInput.value);
-        payload.algorithm = algorithmInput.value;
-      }
-      render(await request("/api/control", payload));
-    }
-
-    toggleButton.addEventListener("click", function () {
-      control(latest && latest.running ? "pause" : "start").catch(showError);
-    });
-    document.getElementById("new-episode").addEventListener("click", function () {
-      control("new_episode").catch(showError);
-    });
-    stepInput.addEventListener("input", function () {
-      stepOutput.value = stepInput.value;
-    });
-
-    function showError(error) {
-      errorLabel.textContent = error.message;
-    }
-
-    async function refresh() {
-      if (inFlight) return;
-      inFlight = true;
       try {
-        const data = await request("/api/tick", { steps: Number(stepInput.value) });
-        render(data);
-      } catch (error) {
-        showError(error);
+        await update("/api/control", payload);
       } finally {
-        inFlight = false;
+        controlPending = false;
+        toggleButton.disabled = newButton.disabled = foodInput.disabled = false;
       }
     }
 
-    request("/api/state").then(render).catch(showError);
-    window.setInterval(refresh, 60);
+    toggleButton.addEventListener("click", () => control({ action: latest.running ? "pause" : "start" }));
+    document.getElementById("settings").addEventListener("submit", event => {
+      event.preventDefault();
+      control({ action: "new_episode", food_pairs: Number(foodInput.value) });
+    });
+    stepInput.addEventListener("input", () => { document.getElementById("steps-value").value = stepInput.value; });
+    update("/api/state").then(() => {
+      if (latest) toggleButton.disabled = newButton.disabled = false;
+    });
+    window.setInterval(() => {
+      if (latest && !pendingRequests && !controlPending) update("/api/tick", { steps: Number(stepInput.value) });
+    }, 100);
   </script>
 </body>
 </html>
