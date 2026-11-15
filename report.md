@@ -1,8 +1,8 @@
-# BIL353 projesi: sıfırdan kodu anlayarak ilerleme
+# BIL353 — Çok Ajanlı Yiyecek Toplama: Proje Raporu
 
-Bu rapor, projeyi daha önce yapay zekâ veya web programlama görmemiş birinin okuyabileceği sırayla açıklar. Her bölümde üç soruya cevap arıyoruz: **Kavram nedir? Projede neden gerekiyor? Kodda nasıl yaptık?** Çalıştırma komutları için `README.md` dosyasını kullanın.
+Bu rapor, üç ajanın yiyecek toplamak için rekabet ettiği simülasyonun kurallarını, öğrenme yöntemini ve yazılım bileşenlerini açıklar. Her bileşen üç soruyla ele alınır: **Bu parça nedir? Ne işe yarar? Bu projede nasıl kullanılmıştır?** Küçük kod örnekleri ve sayısal hesaplar bu açıklamaları destekler. Kurulum ve çalıştırma komutları `README.md` dosyasındadır.
 
-## 1. Önce yaptığımız işi anlayalım
+## 1. Projenin amacı ve kapsamı
 
 Bir oyun tahtası düşünün. Tahtada üç oyuncu, toplanabilecek yeşil yiyecekler ve kaçınılacak kırmızı yiyecekler var. Oyuncuların her birine **ajan** diyoruz. Ajan, çevresinden bilgi alıp bir hareket seçen yazılım parçasıdır.
 
@@ -22,12 +22,14 @@ Projede tek öğrenme yöntemi, tablo tabanlı **Q-learning** kullanılır. Bir 
 | Yiyecekler gözlemlenebilir | Bütün yeşil ve kırmızı koordinatlar gözleme verilir | `Observation` |
 | Hız rastgele 1–3 hücre | Her ajana bölüm başında hız atanır | `new_episode()` |
 | Yukarı, aşağı, sol, sağ, eylemsiz | Beş ayrık seçenek | `ACTIONS`, `DELTAS`, `move()` |
-| Yeşil +1, kırmızı −1; bağımsız ödül | Yalnızca yiyeceği alan ajanın sayacı ve Q değeri güncellenir | `Agent.reward`, `move()`, `LearningMemory.learn()` |
-| Yeşil için rekabette sol kazanır | Aynı hücreye aynı mikro-adımda gelenler arasında `Left` önceliklidir | `move()` |
+| Yeşil +1, kırmızı −1; bağımsız ödül | Yiyecek ödülü yalnızca toplayan ajana; Q güncellemesi yalnızca hamleyi yapan ajana aittir | `Agent.reward`, `move()`, `LearningMemory.learn()` |
+| Sabit hamle sırası | Her turda ajan 1 → ajan 2 → ajan 3; her hamle sonrasında yeşil kontrolü | `Simulation.step()` |
 
-Ödev öğrenmenin hangi algoritmayla yapılacağını zorunlu kılmıyor. Az kodla gerçek ödül güncellemesi yapabildiğimiz için Q-learning seçtik. Ödevdeki ek 20 puanlık yaratıcı davranış bölümü için ayrıca bir örüntü bulucu veya yeni algoritma eklemedik. Bu sürüm temel kuralları karşılamaya odaklanır; puan garantisi vermez.
+Ödev öğrenmenin hangi algoritmayla yapılacağını zorunlu kılmıyor. Küçük bir durum tablosuyla ödüle dayalı güncelleme yapılabildiği için Q-learning kullanılmıştır. Ayrıca bir örüntü bulucu veya ikinci öğrenme algoritması bulunmaz.
 
-## 2. Dosyaları ve görevlerini ayıralım
+**Yürütme modeli:** Ajanlar sırayla hareket eder. Bu nedenle özgün ödev metnindeki eşzamanlı yiyecek rekabetinde sola hareketin öncelikli olması kuralı uygulanmaz. Sıralı modelde yiyeceği önce ulaşan ajan alır; sonraki ajanlar güncel tahtaya göre karar verir.
+
+## 2. Yazılım bileşenleri ve sorumlulukları
 
 | Dosya | Görevi |
 |---|---|
@@ -36,7 +38,7 @@ Projede tek öğrenme yöntemi, tablo tabanlı **Q-learning** kullanılır. Bir 
 | `index.html` | Tahtayı çizme, düğmeler, ayarlar, öğrenme ve bölüm sonuçları |
 | `hw.txt` | Verilen özgün ödev metni |
 | `README.md` | Kurulum ve çalıştırma kılavuzu |
-| `report.md` | Şu anda okuduğunuz açıklama |
+| `report.md` | Projenin kavramları, yöntemi ve bileşenlerini açıklayan sunum raporu |
 | `learning_memory.json` | Çalıştırınca oluşan öğrenme verisi |
 
 Python, oyunun gerçek durumunu tutar. HTML üzerindeki bir daireyi çizmek o ajanı hareket ettirmez; önce Python konumu değiştirir, sonra HTML yeni koordinatı ekranda gösterir. Böylece oyun kuralları tek yerde bulunur.
@@ -212,7 +214,7 @@ Aynı sıradaki elemanlar birbirini karşılar:
 
 Hiçbir değişimde hem x hem y aynı anda değişmez; çapraz hareket yapılamaz. “No Action” bir karar seçeneğidir, otomatik bekleme durumu değildir.
 
-Ödev aynı maddede “4 branches” ifadesini ve beş eylemi birlikte veriyor. Uygulama, açıkça listelenen beş eylemi kullanır. Beş ayrı eşzamanlı hareket değil, her adımda bu listeden tek seçim yapılır.
+Ödev aynı maddede “4 branches” ifadesini ve beş eylemi birlikte veriyor. Uygulama, açıkça listelenen beş eylemi kullanır. Her hamlede bu listeden tek seçim yapılır.
 
 ## 10. Hızlı ajan yiyeceğin üzerinden atlıyor mu?
 
@@ -228,26 +230,19 @@ Hayır. Hızı 3 olan bir ajanı bir anda üç hücre ileri ışınlamıyoruz. `
 
 Tahta dışına çıkmak da hareketi durdurur. `(0, 5)` konumundan sola giden ajan `(−1, 5)` noktasına geçemez.
 
-`project()` aynı sınır/yiyecek kurallarıyla tek bir aday hareketi önceden hesaplar. Gerçek tahtayı değiştirmez; ajanın bir yönde kırmızı yiyeceğe çarpıp çarpmayacağını anlamak için kullanılır. Gerçek eşzamanlı hareket ve ödül dağıtımı `move()` içindedir.
+`project()` aynı sınır/yiyecek kurallarıyla tek bir aday hareketi önceden hesaplar. Gerçek tahtayı değiştirmez; ajanın bir yönde kırmızı yiyeceğe çarpıp çarpmayacağını anlamak için kullanılır. `move()` ise sıradaki ajanın hareketini gerçek tahtada uygular ve kişisel ödülünü döndürür.
 
-## 11. Aynı yiyeceğe giden ajanları nasıl çözdük?
+## 11. Sıralı hareket ve yiyecek rekabeti
 
-Her mikro-adımda hareket eden ajanların varış hücreleri `claims` sözlüğünde toplanır. Bir hücreye giden iki ajan varsa o hücrenin aday listesi ikisini de içerir.
+**Nedir?** Sıralı yürütme, bir ajanın hamlesi tamamlanmadan diğer ajanın karar ve hareket aşamasına geçilmemesidir. Her turdaki sıra sabittir: **ajan 1 → ajan 2 → ajan 3**.
 
-Yeşilde kazanan:
+**Ne işe yarar?** Her hamlenin etkisi hemen tahtaya yansır. Yiyeceği kimin aldığı belirsiz kalmaz ve sonraki ajan, artık bulunmayan bir yiyeceğe göre karar vermez.
 
-```python
-winner = min(claimants,
-             key=lambda index: (ACTIONS[actions[index]] != "Left", index))
-```
+**Bu projede nasıl kullanıldı?** `Simulation.step()` yalnızca sıradaki ajanın hamlesini yürütür. Ajan yiyeceğe ulaşırsa yiyecek hemen kümeden kaldırılır. Yeşilde +1, kırmızıda −1 yalnızca o ajana verilir. Her hamle sonrasında yeşiller kontrol edilir; bölüm sürüyorsa sıradaki ajan güncel gözlemini alır.
 
-Python'da `False`, sıralamada `True` değerinden önce gelir. Sol eylemi için `!= "Left"` sonucu `False` olur; dolayısıyla sol hareket öncelik alır. Birden fazla sol varsa veya hiç sol yoksa düşük indeks kazanır; indeksler ajan numarası sırasındadır.
+Örneğin ajan 1 ve ajan 2 aynı yeşile ulaşabilecek konumda olsun. Ajan 1 kendi hamlesinde bu yiyeceği alırsa ajan 2'nin gözleminde artık o yiyecek yoktur. Ajan 2 eylemini kalan yiyeceklere göre seçer. Ajan 1 son yeşili toplamışsa ajan 2 ve ajan 3 hiç hareket etmeden bölüm biter.
 
-Yalnızca kazanan +1 alır. Yiyecek bir kez silinir. Yiyeceğe aynı anda ulaşan bütün adaylar o tur için durdurulur; kaybeden de artık aynı hücreye gelmiştir.
-
-Kırmızıda da yiyecek bir kez tüketilir ve yalnızca bir ajan −1 alır. Ödev kırmızıdaki eşitlik kuralını belirtmediğinden düşük ajan numarası kullanılır.
-
-Bu kural **aynı mikro-adımda varış** için geçerlidir. Başka bir ajan daha erken mikro-adımda yiyeceği almışsa daha sonra gelen ajan onu geri alamaz. Ajanları birbirine duvar yapmadık; ödev böyle bir engel kuralı tanımlamıyor.
+Aynı hücrede birden fazla ajan bulunabilir; ajanlar birbirine duvar oluşturmaz. Sabit sıra, aynı yiyeceğe erişebilen ajanlar arasında önce oynayana avantaj sağlayabilir. Bu, yürütme modelinin bir sınırlamasıdır.
 
 ## 12. Ödül, durum ve Q değeri arasındaki fark
 
@@ -451,7 +446,7 @@ Hedef = 1
 Yeni Q = 0,1 + 0,2 × (1 − 0,1) = 0,28
 ```
 
-4.000 adım sınırına gelmek de bizim bölüm tanımımızda bitiştir; o adımda gelecek Q eklemeyiz.
+4.000 tam tur sınırına gelmek de bölüm tanımında bitiştir. Bu sınır, üçüncü ajanın hamlesi tamamlandığında kontrol edilir; bölümü bitiren hamlede gelecek Q eklenmez.
 
 ### Kodda karşılığı
 
@@ -467,31 +462,34 @@ self.visits[key][action] += 1
 
 Arayüzdeki son Q hesabı bu fonksiyonun döndürdüğü gerçek değerlerden gelir. Örnek bir animasyon veya uydurulmuş öğrenme göstergesi değildir. Bu sürümde uygunluk izi, ek yol araması veya ikinci öğrenme yöntemi yoktur.
 
-## 18. Bir simülasyon adımının tamamı
+## 18. Hamle, tur ve bölüm akışı
 
-`Simulation.step()` programın ana akışıdır:
+**Hamle**, tek ajanın bir eylem seçip sonucunu almasıdır. **Tur**, üç ajanın sırasıyla birer hamle yapmasıdır. **Bölüm**, başlangıç tahtasından yeşillerin tükenmesine veya 4.000 turun tamamlanmasına kadar süren deneyimdir.
 
-1. Her ajan için mevcut tahtadan gözlem ve durum değerleri hazırlanır.
-2. Her ajan Q değerleri ve ε ile bir eylem seçer.
-3. Bütün eylemler `move()` ile eşzamanlı mikro-adımlar halinde yürütülür.
-4. Her ajanın kendi ödülü alınır.
-5. Yeşillerin bitip bitmediği ve adım sınırı kontrol edilir.
-6. Her ajanın hareket sonrası durumu hesaplanır ve kendi Q satırı güncellenir.
-7. Bölüm bitmediyse sonraki adım beklenir.
-8. Bölüm bittiyse sonuç geçmişe eklenir, sayaç artar ve yeni tahta oluşturulur.
+Bu ayrım, her ajan hamlesinin ayrı gözlemlenmesini ve son yiyeceğin alındığı anda bölümün bitirilmesini sağlar. `Simulation.step()` tek hamle yürütür:
 
-İlk üç ajanın kararını aynı eski tahtaya göre hazırlamak önemlidir. Ajan 1'i hareket ettirip sonra ajan 2'ye karar verdirseydik ikinci ajan ilk ajanın henüz yaptığı hareketi görmüş olurdu; eşzamanlı karar düzeni bozulurdu.
+1. Sırası gelen ajan için mevcut tahtadan gözlem ve durum değerleri hazırlanır.
+2. Ajan, kendi Q değerleri ve ε ile bir eylem seçer.
+3. `move()` yalnızca o ajanı hareket ettirir ve kişisel ödülünü döndürür.
+4. Yeşillerin bitip bitmediği kontrol edilir. Ajan 3 hamlesini tamamladıysa tur sayacı ilerler ve 4.000 tur sınırı da değerlendirilir.
+5. Yalnızca hareket eden ajanın Q satırı güncellenir. Bölüm bittiyse gelecek değer sıfırdır.
+6. Bölüm sürüyorsa sıra ajan 1'den 2'ye, 2'den 3'e, 3'ten sonraki turun ajan 1'ine geçer.
+7. Bölüm bittiyse kalan ajanların hamleleri atlanır; sonuç geçmişe eklenir ve yeni bölüm ajan 1 ile başlar.
+
+Üç ajanın gözlem ve kararları tur başında topluca hazırlanmaz. Ajan 2, ajan 1'in hareketinden sonraki tahtayı; ajan 3 de ilk iki ajanın hamlelerinden sonraki tahtayı gözlemler.
+
+Devam eden bölümde `step_count` tamamlanan tam turları sayar. Bölümün sonuç kaydındaki `steps` alanı, son yeşilin alındığı kısmi turu da kullanılan tur sayısına dâhil eder. Örneğin ilk turun ajan 2 hamlesinde biten bölümün sonucu 1 tur olarak kaydedilir.
 
 ### Tek hareketi baştan sona izleyelim
 
-Ajan 1 `(4, 5)` konumunda, hızı 2, son yeşil `(6, 5)` hücresinde olsun. Diğer ajanlar bu yiyeceğe aynı anda ulaşmasın. Eylem seçiminin sağ olduğunu varsayalım; keşif varsa başka hareket de seçilebilir.
+Ajan 1 `(4, 5)` konumunda, hızı 2, son yeşil `(6, 5)` hücresinde olsun. Eylem seçiminin sağ olduğunu varsayalım; keşif varsa başka hareket de seçilebilir.
 
 - Hedef sağdadır; yeni bir durumsa sağın başlangıç Q değeri +0,1 olabilir.
 - Ajan önce `(5, 5)`, sonra `(6, 5)` hücresine gider.
 - Yeşil silinir; yalnızca ajan 1 +1 alır.
 - Tahtada yeşil kalmadığı için bölüm biter.
 - Gelecek Q sıfır alınır; başlangıç 0,1 ise yeni Q 0,28 olur.
-- Diğer ajanların o adımdaki ödülü 0'dır; kendi eylem satırları kendi sonuçlarıyla güncellenir.
+- Ajan 2 ve ajan 3 hareket etmez; yapmadıkları hamleler için Q güncellemesi almazlar.
 - Bölüm sonucu belleğin geçmiş listesine eklenir ve yeni tahta hazırlanır.
 
 Yeni bölüm açılırken Q tablosu sıfırlanmaz. **Tahta değişir, öğrenilmiş deneyim kalır.**
@@ -510,7 +508,7 @@ Yeni bölüm açılırken Q tablosu sıfırlanmaz. **Tahta değişir, öğrenilm
 | `visits` | Durum-eylem güncelleme sayıları |
 | `history` | Tamamlanan bütün bölümlerin parametre ve sonuçları |
 
-Bir geçmiş satırında tarih, bölüm numarası, her renkten yiyecek sayısı, başlangıç seed değeri, seçilen uzaklık ölçüsü, kullanılan α/γ/ε, adım sayısı, toplam yeşil/kırmızı/ödül ve üç ajanın ayrı hızları ile skorları vardır.
+Bir geçmiş satırında tarih, bölüm numarası, her renkten yiyecek sayısı, başlangıç seed değeri, seçilen uzaklık ölçüsü, kullanılan α/γ/ε, tur sayısı, toplam yeşil/kırmızı/ödül ve üç ajanın ayrı hızları ile skorları vardır. Sıralı akışın sonuçları `turn_order: "sequential"` alanıyla belirtilir; böylece farklı yürütme düzenlerinin sonuçları ayırt edilebilir.
 
 JSON içindeki Q listelerinde hangi indeksin hangi harekete ait olduğu `ACTIONS` sırasıyla belirlenir. `/api/memory` görünümü bu eylem isimlerini ve geçerli katsayıları da döndürür.
 
@@ -538,13 +536,13 @@ Kaydetme; bölüm sonunda, duraklatınca, yeni bölüm düğmesine basınca ve t
 
 `LearningMemory.load()` dosya varsa okur; yoksa boş bellekle başlar. Dosya bozuksa veya sürümü desteklenmiyorsa hata verir; sessizce öğrenmeyi sıfırlamaz.
 
-Önceki uygulamanın `agent_memory.json` ve `training_results.csv` dosyalarına dokunmadık. Eski biçim farklı olduğu için yeni sürüm `learning_memory.json` kullanır; eski verileri yeni deney yapılmış gibi göstermiyoruz. Yeni dosya yerel çalışma verisi olduğu için `.gitignore` içinde tutulur.
+Uygulamanın kullandığı kalıcı öğrenme dosyası `learning_memory.json` dosyasıdır. Bu dosya yerel çalışma verisi olduğu için `.gitignore` içinde tutulur.
 
 ### Seed kaydını doğru yorumlayalım
 
 Seed rastgele sayı üreticisinin **başlangıç** değeridir. Tek bir `Simulation` nesnesiyle arka arkaya otomatik bölümler çalıştırılırsa üretici kaldığı yerden devam eder. Bu nedenle geçmişte aynı başlangıç seed değerinin görünmesi, otomatik bölümlerin aynı tahta olduğu anlamına gelmez.
 
-Aşağıdaki kontrollü 30 bölümlük denemede ise her bölüm için yeni bir `Simulation` oluşturuldu. Böylece aynı seed yeniden verildiğinde aynı başlangıç tahtası, hızlar ve ölçü tekrar üretildi. Uygulamadaki varsayılan rastgele başlangıçta seed alanı `null` olur; HTML bunu “Rastgele” gösterir.
+Karşılaştırmalı deneylerde her bölüm için aynı seed ile yeni bir `Simulation` oluşturularak aynı başlangıç tahtası, hızlar ve ölçü tekrar üretilebilir. Öğrenme belleği ayrı tutulup bölümler arasında paylaşılabilir. Uygulamadaki varsayılan rastgele başlangıçta seed alanı `null` olur; HTML bunu “Rastgele” gösterir.
 
 ## 20. Python ile HTML nasıl konuşuyor?
 
@@ -556,7 +554,7 @@ Tarayıcı Python fonksiyonunu doğrudan çağıramaz. `app.py`, yalnızca bu bi
 |---|---|---|
 | `/` | GET | HTML sayfasını getirir |
 | `/api/state` | GET | Geçerli tahtayı ve istatistikleri verir |
-| `/api/tick` | POST | Çalışıyorsa 1–20 simülasyon adımı yürütür |
+| `/api/tick` | POST | Çalışıyorsa sırayı koruyarak 1–20 ajan hamlesi yürütür |
 | `/api/control` | POST | Başlat, duraklat veya ayarları uygulayıp yeni bölüm aç |
 | `/api/memory` | GET | Güncel Q belleğini, ziyaretleri ve geçmişi JSON olarak verir |
 
@@ -596,11 +594,11 @@ Bir kontrol isteği sürerken düğmeleri geçici olarak devre dışı bırakır
 
 ### `render()`
 
-Sunucudan gelen durumu metinlere ve tabloya dönüştürür. Skorları tarayıcıda yeniden hesaplamak yerine Python'daki gerçek değerleri gösterir. Son öğrenme adımının eski/yeni Q değerleri de burada yazılır.
+Sunucudan gelen durumu metinlere ve tabloya dönüştürür. Skorları tarayıcıda yeniden hesaplamak yerine Python'daki gerçek değerleri gösterir. Tamamlanan tur sayısı, sıradaki ajan ve son hamlenin eski/yeni Q değerleri de burada yazılır.
 
 Eğitim geçmişi, yeni bir sonuç eklendiğinde yeniden oluşturulur. Her satırda parametreler ve üç ajanın kendi ödül/hız bilgisi bulunur. Toplam puan bütün ajanların ödüllerinin toplamıdır.
 
-Aynı yiyecek sayısında en az 20 tamamlanmış bölüm varsa ilk 10 ve son 10 bölümün ortalama toplam ödülü gösterilir. Farklı sayıda yiyecekle alınan ham skorları doğrudan karşılaştırmamak için bu özette geçerli yiyecek sayısıyla eşleşen kayıtlar kullanılır. Bu küçük özet kontrollü bilimsel deney yerine geçmez.
+Aynı yiyecek sayısı ve aynı sıralı akışla en az 20 tamamlanmış bölüm varsa ilk 10 ve son 10 bölümün ortalama toplam ödülü gösterilir. Bunun için geçerli yiyecek sayısıyla eşleşen ve `turn_order` alanı `sequential` olan kayıtlar kullanılır. Bu küçük özet kontrollü bilimsel deney yerine geçmez.
 
 ### `draw()` ve Canvas
 
@@ -617,78 +615,49 @@ ile buluruz. `0.5` hücrenin sol üst köşesinden merkezine geçer. Yeşiller d
 
 ### Eğitim hızı ile ajan hızı farklıdır
 
-Tarayıcı yaklaşık 100 milisaniyede bir yenileme denemesi yapar. Kaydırıcı, bir istekte kaç simülasyon adımı çalıştırılacağını belirler. Önceki istek sürüyorsa yenisini biriktirmez.
+Tarayıcı yaklaşık 100 milisaniyede bir yenileme denemesi yapar. Kaydırıcı, bir istekte kaç ajan hamlesi çalıştırılacağını belirler. Varsayılan değer 1'dir; böylece ajanların hamleleri ayrı ayrı izlenebilir. Değer 1–20 arasında artırılırsa aynı istekte hamleler sırayla yürütülür ve son durum çizilir. Her hamle sonundaki yeşil kontrolü korunur. Önceki istek sürüyorsa yenisi biriktirilmez.
 
-Ajan hızı ise tek bir simülasyon adımında kaç hücre ilerleyebildiğidir: 1, 2 veya 3. Kaydırıcı bunu değiştirmez. Gerçek eğitim hızı hesaplama süresine ve tarayıcının zamanlayıcısına bağlıdır; sabit bir saniyelik adım garantisi yoktur. Tarayıcı sekmesi kapalıyken yeni tick gelmez, dolayısıyla bu tasarımda simülasyon ilerlemez.
+Ajan hızı ise tek bir hamlede kaç hücre ilerleyebildiğidir: 1, 2 veya 3. Kaydırıcı bunu değiştirmez. Gerçek eğitim hızı hesaplama süresine ve tarayıcının zamanlayıcısına bağlıdır; sabit bir saniyelik hamle garantisi yoktur. Tarayıcı sekmesi kapalıyken yeni tick gelmez, dolayısıyla bu tasarımda simülasyon ilerlemez.
 
-## 22. İlk bildirilen ayar hatası neydi, nasıl düzelttik?
+## 22. Öğrenme başarısı nasıl değerlendirilir?
 
-Eski HTML, yiyecek kutusu odakta değilken her yenilemede sunucunun eski değerini kutuya geri yazıyordu. Örneğin kullanıcı 125'i 40 yapıp başka bir alana tıkladığında, sonraki yenileme tekrar 125 yazabiliyordu. Yeni bölüm isteği de yanlışlıkla 125 gönderiyordu.
+**Nedir?** Değerlendirme, ajanların davranışını ölçülebilir sonuçlarla incelemektir. Q tablosunun büyümesi veya güncelleme sayısının artması, tek başına daha iyi bir politika öğrenildiğini göstermez.
 
-Şimdi kutuyu yalnızca ilk durum yüklemesinde sunucudan dolduruyoruz:
+**Ne işe yarar?** Bölümler arasında hangi davranışların değiştiğini ve bu değişimin ödüle nasıl yansıdığını anlamayı sağlar. Ajanlar ortak yiyecekler için rekabet ettiğinden toplam puan ve kişisel puanlar birlikte incelenmelidir.
 
-```javascript
-if (!latest) foodInput.value = data.food_pairs;
-```
+**Bu projede nasıl kullanıldı?** Arayüz, tamamlanan bölüm sonuçlarını geçmiş tablosunda gösterir. Karşılaştırmada aşağıdaki ölçüler kullanılır:
 
-Sonraki yenilemeler kullanıcının henüz uygulamadığı taslağı bozmaz. “Uygula / Yeni bölüm” açıkça bu değeri gönderir. Canlı durumdaki “Uygulanan yiyecek sayısı” satırı gerçekten kullanılan sayıyı gösterir.
+| Ölçü | Yorumu |
+|---|---|
+| Toplanan yeşil | Hedef yiyeceklere erişimi gösterir |
+| Toplanan kırmızı | Kaçınılması istenen yiyeceklerle etkileşimi gösterir |
+| Toplam ödül | Yeşil ve kırmızı toplamanın birlikte sonucudur |
+| Kullanılan tur sayısı | Sonuca ulaşmak için gereken süreyi tur cinsinden gösterir |
+| Ajanların ayrı ödülleri | Rekabetin her ajana nasıl yansıdığını gösterir |
+| Bütün yeşillerin toplanması | Bölümün hedefe ulaşılarak tamamlanıp tamamlanmadığını gösterir |
 
-Ayrıca ilk durum isteğini, otomatik adımları ve kontrol isteklerini aynı kuyruğa aldık. Böylece ayar uygulama ile eski cevapların çizilmesi arasındaki sıralama sorunu giderildi.
+Aynı yiyecek sayısı ve aynı sıralı akışla en az 20 tamamlanmış bölüm varsa ilk 10 ve son 10 bölümün ortalama toplam ödülü karşılaştırılır. Farklı yiyecek sayıları veya farklı yürütme düzenleri aynı karşılaştırmaya katılmaz. Bellekte bulunabilen eski eşzamanlı kayıtlar, sıralı akışın performans sonucu olarak yorumlanmaz.
 
-## 23. Zaman içinde gerçekten ne değişti? Çalıştırılan 30 bölüm
+Rastgele yerleşim, hızlar ve azalan keşif oranı da sonucu etkiler. Bu nedenle ortalama ödüldeki artışın tamamını yalnızca Q-learning'e bağlamak doğru değildir. Daha güçlü bir deney için aynı başlangıç koşullarında tekrarlı çalışmalar ve öğrenmenin kapalı olduğu bir kontrol politikası gerekir. Proje, bütün yeni tahtalarda sürekli iyileşme veya en iyi politika garantisi vermez.
 
-Bu sürüm hazırlanırken gerçek simülasyon çalıştırıldı; aşağıdaki değerler tahmin veya örnek veri değildir. Yeni `learning_memory.json` bu 30 bölümün Q belleğini ve bütün sonuçlarını içerir.
-
-Deney düzeni:
-
-- Her bölümde 40 yeşil, 40 kırmızı yiyecek.
-- α = 0,20 ve γ = 0,90 sabit.
-- Başlangıç seed değerleri 42–51, aynı sırayla üç defa kullanıldı.
-- Her bölüm için aynı öğrenme belleğini kullanan yeni `Simulation` oluşturuldu.
-- Böylece her 10 bölümlük grupta aynı başlangıç tahtaları, hızlar ve uzaklık ölçüleri kullanıldı; Q belleği sıfırlanmadı.
-- Keşif oranı tamamlanan bölüm sayısına göre normal biçimde azaldı.
-
-| Grup | Ortalama yeşil | Ortalama kırmızı | Ortalama ödül | Ortalama adım | Bütün yeşilleri alan bölüm |
-|---|---:|---:|---:|---:|---:|
-| 1–10 | 40 | 3,3 | 36,7 | 376,9 | 10 / 10 |
-| 11–20 | 40 | 2,9 | 37,1 | 447,4 | 10 / 10 |
-| 21–30 | 40 | 2,7 | 37,3 | 386,1 | 10 / 10 |
-
-Ajanların ayrı ortalama ödülleri:
-
-| Ajan | İlk 10 bölüm | Son 10 bölüm |
-|---|---:|---:|
-| 1 | 11,6 | 12,2 |
-| 2 | 12,5 | 13,6 |
-| 3 | 12,6 | 11,5 |
-
-### Bu sonucu nasıl okuyalım?
-
-Toplam ortalama ödül 0,6 arttı ve kırmızı ortalaması 0,6 azaldı. Buna karşılık adım sayısı düzenli azalmadı; ajan 3'ün ortalama kişisel ödülü de düştü. Ortak yiyecekler için rekabet edildiğinden takım toplamındaki artış her ajana aynı şekilde yansımaz.
-
-İlk 10 bölümde kullanılan ε yaklaşık 0,2000–0,1520; son 10 bölümde 0,1088–0,0827 aralığındaydı. Hem Q değerleri hem keşif davranışı değişti. Bu yüzden küçük farkın tamamını yalnızca Q tablosunun daha iyi olmasına bağlayamayız. Öğrenme kapalı bir kontrol grubu ve çok daha fazla tekrar olmadan kesin nedensel sonuç çıkaramayız.
-
-Somut olarak söyleyebildiğimiz: **36.312 gerçek ajan güncellemesi yapıldı, bellekte 554 durum satırı oluştu ve bu denemede sonraki gruplar ortalamada daha az kırmızı topladı.** Bu, bütün yeni tahtalarda sürekli iyileşme veya en iyi politika garantisi değildir.
-
-HTML'de bu geçmiş kayıtlarını görebilir, eğitimi sürdürerek yeni bölümlerin aynı listeye eklendiğini izleyebilirsiniz. Başka yiyecek sayısına geçerseniz her satır kendi parametresini korur.
-
-## 24. Neleri bilinçli olarak basit bıraktık?
+## 23. Sınırlamalar ve tasarım kararları
 
 - Tek öğrenme yöntemi Q-learning'dir; rota algoritması kıyası ve sinir ağı yoktur.
 - α ve γ sabittir. ε bölüm sayısıyla azalır. Kullanıcıya onlarca ayar eklenmez.
 - Yiyecekler rastgele dağıtılır; gizli bir yerleşim örüntüsü varmış gibi davranılmaz.
 - Durum tablosu bütün tahtayı içermez; belleği küçük tutmak için bilgi kaybı kabul edilir.
 - Öklid yalnızca yakın rakip ölçüsüdür; hiçbir yerde çapraz hareket yoktur.
-- 4.000 adım sınırı, takılan bölümün sonsuza kadar sürmesini engelleyen uygulama kararıdır; ödevde verilmiş bir sayı değildir.
+- 4.000 tur sınırı, takılan bölümün sonsuza kadar sürmesini engelleyen uygulama kararıdır; ödevde verilmiş bir sayı değildir.
 - Ajan, yiyecek veya sınırda erken durur. Kırmızı yiyecek bir duvar değildir; alınabilir ve −1 ödül verir.
 - Aynı hücrede ajan bulunması yasaklanmaz. Ödevde yalnızca yiyecek rekabetinin sonucu tanımlanmıştır.
+- Sabit 1 → 2 → 3 sırası, aynı yiyeceğe ulaşabilecek ajanlar arasında önce oynayana avantaj sağlayabilir.
 - Bellek kalıcıdır; tahtanın tam kaldığı yer kaydedilmez. Uygulama tekrar açılınca yeni tahta kurulur.
 
-## 25. Kodu hangi sırayla okuyayım?
+## 24. Bileşenler arası akış ve sunum özeti
 
-Önce `simulation.py` içindeki `ACTIONS` ve `DELTAS`, sonra `Agent`, `Observation`, `new_episode()`, `observation_for()`, `project()` ve `move()` ile ortam kurallarını anlayın. Ardından `state_values()`, `choose_action()` ve `LearningMemory.learn()` ile öğrenmeyi okuyun. Son olarak `step()` içinde bunların nasıl birleştiğini izleyin.
+Ortamın temelini `simulation.py` içindeki `ACTIONS`, `DELTAS`, `Agent` ve `Observation` oluşturur. `new_episode()` tahtayı kurar; `observation_for()` gözlemi hazırlar; `project()` aday hareketi hesaplar ve `move()` gerçek hamleyi uygular. `state_values()`, `choose_action()` ve `LearningMemory.learn()` öğrenme zincirini oluşturur. `step()` bütün bu parçaları sıralı hamle akışında birleştirir.
 
-Daha sonra `app.py` içindeki `main()`, `make_handler()`, `state()`, `do_POST()` ve `control()` ile web bağlantısına geçin. En son `index.html` içindeki `request()`, `update()`, `control()`, `render()` ve `draw()` fonksiyonlarını okuyun.
+`app.py` içindeki `main()` ve `make_handler()` sunucuyu hazırlar; `state()`, `do_POST()` ve `control()` arayüz ile simülasyon arasındaki bağlantıyı yürütür. `index.html` içindeki `request()`, `update()`, `control()`, `render()` ve `draw()` ise iletişim, kullanıcı kontrolü ve çizimi gerçekleştirir.
 
 Böylece ekrandaki düğmeden Q güncellemesine kadar zinciri takip edebilirsiniz:
 
@@ -697,11 +666,12 @@ HTML düğmesi / zamanlayıcı
     → HTTP isteği
     → app.py doğrulaması
     → Simulation.step()
-    → gözlem → eylem → hareket → kişisel ödül
+    → sıradaki ajan: gözlem → eylem → hareket → kişisel ödül
+    → yeşillerin bitiş kontrolü / tur sonu sınır kontrolü
     → Q tablosunun güncellenmesi
     → bölüm bittiyse geçmiş ve JSON kaydı
     → HTTP cevabı
     → HTML metinleri ve tahtanın yeniden çizilmesi
 ```
 
-Projeyi kendi cümlenizle anlatırken bu sırayı kullanabilirsiniz: “Önce kurallara uygun rastgele tahta kuruyorum. Her ajana yalnızca izin verilen gözlemi veriyorum. Gözlemi küçük bir duruma çevirip Q tablosuyla hareket seçtiriyorum. Eşzamanlı hareketten sonra yiyecekleri ve kişisel ödülleri çözüyorum. Sonuçla ilgili Q değerini güncelliyorum. Deneyim JSON'da kalıyor; HTML'den hem hareketleri hem geçmiş sonuçları izliyorum.”
+Proje, rastgele oluşturulan bir tahtada üç ajanın bağımsız ödüllerle öğrenmesini sağlar. Ajanlar 1 → 2 → 3 sırasıyla hareket eder; her biri güncel gözlemini küçük bir durum temsiline dönüştürüp Q tablosuyla eylem seçer. Her hamlenin ardından yeşiller kontrol edilir ve yalnızca hareket eden ajanın deneyimi güncellenir. Kalıcı JSON belleği öğrenmenin yeni bölümlerde sürmesini; web arayüzü ise hareketlerin, Q hesaplarının ve sonuçların izlenmesini sağlar.

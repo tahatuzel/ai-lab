@@ -114,6 +114,7 @@ class Simulation:
 
     def new_episode(self) -> None:
         self.step_count = 0
+        self.next_agent_index = 0
         self.last_updates: list[dict] = []
         self.metric = self.rng.choice(("Manhattan", "Euclidean"))
         cells = self.rng.sample(range(BOARD_SIZE ** 2), self.food_pairs * 2 + 3)
@@ -166,48 +167,34 @@ class Simulation:
         best = max(values)
         return self.rng.choice([index for index, value in enumerate(values) if value == best])
 
-    def move(self, actions: list[int]) -> list[int]:
-        """Move simultaneously, one cell at a time, then resolve food claims."""
-        rewards = [0] * len(self.agents)
-        stopped: set[int] = set()
-        for micro_step in range(max(agent.speed for agent in self.agents)):
-            claims: dict[Position, list[int]] = {}
-            for index, agent in enumerate(self.agents):
-                if index in stopped or micro_step >= agent.speed or actions[index] == 4:
-                    continue
-                dx, dy = DELTAS[actions[index]]
-                destination = agent.position[0] + dx, agent.position[1] + dy
-                if not (0 <= destination[0] < BOARD_SIZE and 0 <= destination[1] < BOARD_SIZE):
-                    stopped.add(index)
-                    continue
-                agent.position = destination
-                claims.setdefault(destination, []).append(index)
-            for destination, claimants in claims.items():
-                if destination in self.green_foods:
-                    winner = min(claimants, key=lambda index: (ACTIONS[actions[index]] != "Left", index))
-                    self.green_foods.remove(destination)
-                    self.agents[winner].green += 1
-                    rewards[winner] += 1
-                    stopped.update(claimants)
-                elif destination in self.red_foods:
-                    winner = min(claimants)
-                    self.red_foods.remove(destination)
-                    self.agents[winner].red += 1
-                    rewards[winner] -= 1
-                    stopped.update(claimants)
-        return rewards
+    def move(self, agent: Agent, action: int) -> int:
+        """Finish one agent's move before the next agent can act."""
+        if action == 4:
+            return 0
+        agent.position, _ = self.project(self.observation_for(agent), action)
+        if agent.position in self.green_foods:
+            self.green_foods.remove(agent.position)
+            agent.green += 1
+            return 1
+        if agent.position in self.red_foods:
+            self.red_foods.remove(agent.position)
+            agent.red += 1
+            return -1
+        return 0
 
     def step(self) -> dict | None:
-        states = [self.state_values(agent, self.observation_for(agent)) for agent in self.agents]
-        actions = [self.choose_action(values) for _, values in states]
-        rewards = self.move(actions)
-        self.step_count += 1
+        """Run one agent's action; agents 1, 2, 3 together make one turn."""
+        agent = self.agents[self.next_agent_index]
+        key, values = self.state_values(agent, self.observation_for(agent))
+        action = self.choose_action(values)
+        reward = self.move(agent, action)
+        self.next_agent_index = (self.next_agent_index + 1) % len(self.agents)
+        if self.next_agent_index == 0:
+            self.step_count += 1
         terminal = not self.green_foods or self.step_count >= self.MAX_EPISODE_STEPS
-        self.last_updates = []
-        for index, agent in enumerate(self.agents):
-            next_values = [] if terminal else self.state_values(agent, self.observation_for(agent))[1]
-            update = self.memory.learn(states[index][0], actions[index], rewards[index], next_values, terminal)
-            self.last_updates.append({"agent": agent.agent_id, **update})
+        next_values = [] if terminal else self.state_values(agent, self.observation_for(agent))[1]
+        update = self.memory.learn(key, action, reward, next_values, terminal)
+        self.last_updates = [{"agent": agent.agent_id, **update}]
         if not terminal:
             return None
         epsilon = self.memory.epsilon
@@ -221,7 +208,8 @@ class Simulation:
             "alpha": ALPHA,
             "gamma": GAMMA,
             "epsilon": epsilon,
-            "steps": self.step_count,
+            "steps": self.step_count + int(self.next_agent_index != 0),
+            "turn_order": "sequential",
             "green": sum(agent.green for agent in self.agents),
             "red": sum(agent.red for agent in self.agents),
             "reward": sum(agent.reward for agent in self.agents),

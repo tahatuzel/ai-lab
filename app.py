@@ -55,6 +55,7 @@ def make_handler(simulation: Simulation, auto_start: bool = True) -> type[BaseHT
                 "running": shared["running"], "board_size": BOARD_SIZE,
                 "episode": memory.episodes + 1, "completed_episodes": memory.episodes,
                 "step": simulation.step_count, "metric": simulation.metric,
+                "next_agent": simulation.agents[simulation.next_agent_index].agent_id,
                 "food_pairs": simulation.food_pairs,
                 "green_foods": sorted(simulation.green_foods),
                 "red_foods": sorted(simulation.red_foods),

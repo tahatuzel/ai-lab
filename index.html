@@ -49,7 +49,7 @@
         <span><i class="mark" style="background:#7c3aed"></i>Ajan 2</span>
         <span><i class="mark" style="background:#f97316"></i>Ajan 3</span>
       </div>
-      <p>Kesikli çizgi, ajanın görebildiği en yakın rakibi gösterir. Hareketler yalnızca yukarı, aşağı, sola ve sağadır; eylemsiz kalmak da mümkündür.</p>
+      <p>Ajanlar her turda 1 → 2 → 3 sırasıyla hamle yapar. Her hamleden sonra yeşiller kontrol edilir; biterse bölüm hemen sona erer. Kesikli çizgi, ajanın görebildiği en yakın rakibi gösterir.</p>
     </section>
     <aside>
       <section class="card">
@@ -63,8 +63,9 @@
           <input id="food-pairs" type="number" min="1" max="375" step="1" value="125" required>
           <p>Yiyecek sayısını değiştirdikten sonra “Uygula / Yeni bölüm”e basın. Tahta yenilenir; öğrenilen değerler korunur.</p>
         </form>
-        <label for="steps">Yenileme başına adım: <output id="steps-value">3</output></label>
-        <input id="steps" type="range" min="1" max="20" value="3">
+        <label for="steps">Yenileme başına ajan hamlesi: <output id="steps-value">1</output></label>
+        <input id="steps" type="range" min="1" max="20" value="1">
+        <p>1 değerinde her ajanın hamlesi ayrı gösterilir. Daha yüksek değerlerde hamleler sırayla hesaplanır ve son durum çizilir.</p>
         <p id="error" role="alert"></p>
       </section>
       <section class="card">
@@ -73,17 +74,17 @@
       </section>
       <details class="card">
         <summary>Öğrenme nasıl değişiyor?</summary>
-        <p>Her ajan kendi Q tablosunu günceller. Aşağıda son adımın gerçek değerleri gösterilir. Öğrenme her bölümde daha iyi sonuç garantilemez.</p>
+        <p>Her ajan kendi hamlesinden sonra kendi Q tablosunu günceller. Aşağıda son ajan hamlesinin gerçek değerleri gösterilir. Öğrenme her bölümde daha iyi sonuç garantilemez.</p>
         <pre id="learning"></pre>
         <p><a href="/api/memory" target="_blank" rel="noopener">Tüm öğrenme belleğini JSON olarak aç</a></p>
       </details>
     </aside>
     <section class="card history">
       <h2>Eğitim geçmişi</h2>
-      <p>Bütün tamamlanan bölümler JSON'a kaydedilir. En yeni sonuç üsttedir. Bölüm, yeşiller bitince veya 4.000 adımda sona erer. α öğrenme oranı, γ gelecek ödül ağırlığı, ε keşif oranıdır.</p>
+      <p>Bütün tamamlanan bölümler JSON'a kaydedilir. En yeni sonuç üsttedir. Bölüm, yeşiller bitince veya 4.000 tur tamamlanınca sona erer. Son kısmi tur da sonuçta sayılır. Önceki kayıtlar eşzamanlı akışa aittir. α öğrenme oranı, γ gelecek ödül ağırlığı, ε keşif oranıdır.</p>
       <p id="learning-progress"></p>
       <table>
-        <thead><tr><th>Bölüm / zaman</th><th>Her renk</th><th>Başlangıç seed</th><th>Uzaklık</th><th>α</th><th>γ</th><th>ε</th><th>Adım</th><th>Yeşil</th><th>Kırmızı</th><th>Toplam ödül</th><th>Ajan 1 ödül / hız</th><th>Ajan 2 ödül / hız</th><th>Ajan 3 ödül / hız</th></tr></thead>
+        <thead><tr><th>Bölüm / zaman</th><th>Akış</th><th>Her renk</th><th>Başlangıç seed</th><th>Uzaklık</th><th>α</th><th>γ</th><th>ε</th><th>Tur</th><th>Yeşil</th><th>Kırmızı</th><th>Toplam ödül</th><th>Ajan 1 ödül / hız</th><th>Ajan 2 ödül / hız</th><th>Ajan 3 ödül / hız</th></tr></thead>
         <tbody id="history"></tbody>
       </table>
     </section>
@@ -172,7 +173,8 @@
       statusBadge.textContent = data.running ? "Çalışıyor" : "Duraklatıldı";
       toggleButton.textContent = data.running ? "Duraklat" : "Başlat";
       const lines = [
-        "Bölüm: " + data.episode + " · adım: " + data.step,
+        "Bölüm: " + data.episode + " · tamamlanan tur: " + data.step,
+        "Sıradaki hamle: tur " + (data.step + 1) + " · Ajan " + data.next_agent,
         "En yakın rakip: " + (data.metric === "Euclidean" ? "Öklid" : "Manhattan"),
         "Uygulanan yiyecek sayısı: " + data.food_pairs + " / renk",
         "Kalan yeşil: " + data.green_foods.length + " · kırmızı: " + data.red_foods.length, ""
@@ -194,14 +196,14 @@
           "Gelecek Q: " + row.future_q.toFixed(3) + " · hedef: " + row.target.toFixed(3), "");
       }
       learning.textContent = details.join("\n");
-      const comparable = data.history.filter(row => row.food_pairs === data.food_pairs);
+      const comparable = data.history.filter(row => row.food_pairs === data.food_pairs && row.turn_order === "sequential");
       const average = (rows, field) => rows.reduce((sum, row) => sum + row[field], 0) / rows.length;
       document.getElementById("learning-progress").textContent = comparable.length >= 20
-        ? "Her renkten " + data.food_pairs + " yiyecekle ilk 10 / son 10 bölüm ortalama ödülü: " +
+        ? "Sıralı akışta her renkten " + data.food_pairs + " yiyecekle ilk 10 / son 10 bölüm ortalama ödülü: " +
           average(comparable.slice(0, 10), "reward").toFixed(1) + " / " +
           average(comparable.slice(-10), "reward").toFixed(1) +
           ". Rastgele tahtalar ve keşif de sonucu etkiler; bu fark tek başına öğrenme kanıtı değildir."
-        : "İlk / son 10 bölüm özeti için aynı yiyecek sayısında en az 20 bölüm gerekir.";
+        : "İlk / son 10 bölüm özeti için sıralı akışta aynı yiyecek sayısında en az 20 bölüm gerekir.";
       if (historyLength !== data.history.length) {
         historyLength = data.history.length;
         const body = document.getElementById("history");
@@ -209,6 +211,7 @@
         for (const row of [...data.history].reverse()) {
           const tr = document.createElement("tr");
           const values = [row.episode + " · " + new Date(row.timestamp).toLocaleString("tr-TR"),
+            row.turn_order === "sequential" ? "Sıralı" : "Eşzamanlı (önceki)",
             row.food_pairs, row.seed ?? "Rastgele", row.metric === "Euclidean" ? "Öklid" : "Manhattan",
             row.alpha, row.gamma, row.epsilon.toFixed(3), row.steps, row.green, row.red, row.reward,
             ...row.agents.map(agent => agent.reward + " / " + agent.speed)];
