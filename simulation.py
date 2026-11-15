@@ -67,7 +67,9 @@ class LearningMemory:
             memory.q_values = data["q_values"]
             memory.visits = data["visits"]
             memory.episodes = data["episodes"]
-            memory.history = data["history"]
+            memory.history = [row for row in data["history"] if row.get("turn_order") == "sequential"]
+            if len(memory.history) != len(data["history"]):
+                memory.save(path)
         return memory
 
     def save(self, path: Path) -> None:

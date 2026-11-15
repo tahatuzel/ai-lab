@@ -508,7 +508,7 @@ Yeni bölüm açılırken Q tablosu sıfırlanmaz. **Tahta değişir, öğrenilm
 | `visits` | Durum-eylem güncelleme sayıları |
 | `history` | Tamamlanan bütün bölümlerin parametre ve sonuçları |
 
-Bir geçmiş satırında tarih, bölüm numarası, her renkten yiyecek sayısı, başlangıç seed değeri, seçilen uzaklık ölçüsü, kullanılan α/γ/ε, tur sayısı, toplam yeşil/kırmızı/ödül ve üç ajanın ayrı hızları ile skorları vardır. Sıralı akışın sonuçları `turn_order: "sequential"` alanıyla belirtilir; böylece farklı yürütme düzenlerinin sonuçları ayırt edilebilir.
+Bir geçmiş satırında tarih, bölüm numarası, her renkten yiyecek sayısı, başlangıç seed değeri, seçilen uzaklık ölçüsü, kullanılan α/γ/ε, tur sayısı, toplam yeşil/kırmızı/ödül ve üç ajanın ayrı hızları ile skorları vardır. Geçmişte yalnızca `turn_order: "sequential"` alanıyla belirtilen sıralı akış sonuçları tutulur. Q değerleri, ziyaret sayıları ve keşif oranını belirleyen toplam öğrenme sayacı, geçmiş kayıtlarının sayısından bağımsız olarak korunur.
 
 JSON içindeki Q listelerinde hangi indeksin hangi harekete ait olduğu `ACTIONS` sırasıyla belirlenir. `/api/memory` görünümü bu eylem isimlerini ve geçerli katsayıları da döndürür.
 
@@ -534,7 +534,7 @@ temporary.replace(path)
 
 Kaydetme; bölüm sonunda, duraklatınca, yeni bölüm düğmesine basınca ve terminalde Ctrl+C ile çıkarken yapılır. İşlem zorla sonlandırılırsa son kayıttan sonraki güncellemeler kaybolabilir. Bu, her adımda diske yazmamanın sonucudur.
 
-`LearningMemory.load()` dosya varsa okur; yoksa boş bellekle başlar. Dosya bozuksa veya sürümü desteklenmiyorsa hata verir; sessizce öğrenmeyi sıfırlamaz.
+`LearningMemory.load()` dosya varsa okur; yoksa boş bellekle başlar. Yükleme sırasında sıralı akışa ait olmayan geçmiş kayıtları ayıklanır ve temizlenmiş veri dosyaya kaydedilir. Dosya bozuksa veya sürümü desteklenmiyorsa hata verir; sessizce öğrenmeyi sıfırlamaz.
 
 Uygulamanın kullandığı kalıcı öğrenme dosyası `learning_memory.json` dosyasıdır. Bu dosya yerel çalışma verisi olduğu için `.gitignore` içinde tutulur.
 
@@ -596,7 +596,7 @@ Bir kontrol isteği sürerken düğmeleri geçici olarak devre dışı bırakır
 
 Sunucudan gelen durumu metinlere ve tabloya dönüştürür. Skorları tarayıcıda yeniden hesaplamak yerine Python'daki gerçek değerleri gösterir. Tamamlanan tur sayısı, sıradaki ajan ve son hamlenin eski/yeni Q değerleri de burada yazılır.
 
-Eğitim geçmişi, yeni bir sonuç eklendiğinde yeniden oluşturulur. Her satırda parametreler ve üç ajanın kendi ödül/hız bilgisi bulunur. Toplam puan bütün ajanların ödüllerinin toplamıdır.
+Eğitim geçmişi, yeni bir sonuç eklendiğinde yeniden oluşturulur. Her satırda parametreler ve üç ajanın kendi ödül/hız bilgisi bulunur. Bölüm bilgisinin hemen yanındaki **Bitiş turu** sütunu, sonuç kaydının `steps` alanını gösterir; bölümün son kısmi turu da bu sayıya dâhildir. Toplam puan bütün ajanların ödüllerinin toplamıdır.
 
 Aynı yiyecek sayısı ve aynı sıralı akışla en az 20 tamamlanmış bölüm varsa ilk 10 ve son 10 bölümün ortalama toplam ödülü gösterilir. Bunun için geçerli yiyecek sayısıyla eşleşen ve `turn_order` alanı `sequential` olan kayıtlar kullanılır. Bu küçük özet kontrollü bilimsel deney yerine geçmez.
 
@@ -636,7 +636,7 @@ Ajan hızı ise tek bir hamlede kaç hücre ilerleyebildiğidir: 1, 2 veya 3. Ka
 | Ajanların ayrı ödülleri | Rekabetin her ajana nasıl yansıdığını gösterir |
 | Bütün yeşillerin toplanması | Bölümün hedefe ulaşılarak tamamlanıp tamamlanmadığını gösterir |
 
-Aynı yiyecek sayısı ve aynı sıralı akışla en az 20 tamamlanmış bölüm varsa ilk 10 ve son 10 bölümün ortalama toplam ödülü karşılaştırılır. Farklı yiyecek sayıları veya farklı yürütme düzenleri aynı karşılaştırmaya katılmaz. Bellekte bulunabilen eski eşzamanlı kayıtlar, sıralı akışın performans sonucu olarak yorumlanmaz.
+Aynı yiyecek sayısı ve aynı sıralı akışla en az 20 tamamlanmış bölüm varsa ilk 10 ve son 10 bölümün ortalama toplam ödülü karşılaştırılır. Farklı yiyecek sayıları aynı karşılaştırmaya katılmaz. Geçmiş yalnızca sıralı akış sonuçlarından oluşur.
 
 Rastgele yerleşim, hızlar ve azalan keşif oranı da sonucu etkiler. Bu nedenle ortalama ödüldeki artışın tamamını yalnızca Q-learning'e bağlamak doğru değildir. Daha güçlü bir deney için aynı başlangıç koşullarında tekrarlı çalışmalar ve öğrenmenin kapalı olduğu bir kontrol politikası gerekir. Proje, bütün yeni tahtalarda sürekli iyileşme veya en iyi politika garantisi vermez.
 

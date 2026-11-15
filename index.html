@@ -81,10 +81,10 @@
     </aside>
     <section class="card history">
       <h2>Eğitim geçmişi</h2>
-      <p>Bütün tamamlanan bölümler JSON'a kaydedilir. En yeni sonuç üsttedir. Bölüm, yeşiller bitince veya 4.000 tur tamamlanınca sona erer. Son kısmi tur da sonuçta sayılır. Önceki kayıtlar eşzamanlı akışa aittir. α öğrenme oranı, γ gelecek ödül ağırlığı, ε keşif oranıdır.</p>
+      <p>Tamamlanan sıralı bölümler JSON'a kaydedilir. En yeni sonuç üsttedir. “Bitiş turu”, bölümün kaç turda sona erdiğini gösterir; son kısmi tur da sayılır. Bölüm, yeşiller bitince veya 4.000 tur tamamlanınca sona erer. α öğrenme oranı, γ gelecek ödül ağırlığı, ε keşif oranıdır.</p>
       <p id="learning-progress"></p>
       <table>
-        <thead><tr><th>Bölüm / zaman</th><th>Akış</th><th>Her renk</th><th>Başlangıç seed</th><th>Uzaklık</th><th>α</th><th>γ</th><th>ε</th><th>Tur</th><th>Yeşil</th><th>Kırmızı</th><th>Toplam ödül</th><th>Ajan 1 ödül / hız</th><th>Ajan 2 ödül / hız</th><th>Ajan 3 ödül / hız</th></tr></thead>
+        <thead><tr><th>Bölüm / zaman</th><th>Bitiş turu</th><th>Her renk</th><th>Başlangıç seed</th><th>Uzaklık</th><th>α</th><th>γ</th><th>ε</th><th>Yeşil</th><th>Kırmızı</th><th>Toplam ödül</th><th>Ajan 1 ödül / hız</th><th>Ajan 2 ödül / hız</th><th>Ajan 3 ödül / hız</th></tr></thead>
         <tbody id="history"></tbody>
       </table>
     </section>
@@ -167,6 +167,7 @@
     }
 
     function render(data) {
+      const history = data.history.filter(row => row.turn_order === "sequential");
       // Initialize once: polling must not overwrite an unapplied user edit.
       if (!latest) foodInput.value = data.food_pairs;
       latest = data;
@@ -183,7 +184,7 @@
         lines.push("Ajan " + agent.id + " · hız " + agent.speed + " · ödül " + agent.reward);
         lines.push("  yeşil " + agent.green + " · kırmızı " + agent.red);
       }
-      lines.push("", "Tamamlanan bölüm: " + data.completed_episodes,
+      lines.push("", "Kayıtlı bölüm: " + history.length,
         "Öğrenilen durum: " + data.learned_states,
         "Q güncellemesi: " + data.updates,
         "Keşif (ε): " + data.epsilon.toFixed(3));
@@ -196,7 +197,7 @@
           "Gelecek Q: " + row.future_q.toFixed(3) + " · hedef: " + row.target.toFixed(3), "");
       }
       learning.textContent = details.join("\n");
-      const comparable = data.history.filter(row => row.food_pairs === data.food_pairs && row.turn_order === "sequential");
+      const comparable = history.filter(row => row.food_pairs === data.food_pairs);
       const average = (rows, field) => rows.reduce((sum, row) => sum + row[field], 0) / rows.length;
       document.getElementById("learning-progress").textContent = comparable.length >= 20
         ? "Sıralı akışta her renkten " + data.food_pairs + " yiyecekle ilk 10 / son 10 bölüm ortalama ödülü: " +
@@ -204,16 +205,16 @@
           average(comparable.slice(-10), "reward").toFixed(1) +
           ". Rastgele tahtalar ve keşif de sonucu etkiler; bu fark tek başına öğrenme kanıtı değildir."
         : "İlk / son 10 bölüm özeti için sıralı akışta aynı yiyecek sayısında en az 20 bölüm gerekir.";
-      if (historyLength !== data.history.length) {
-        historyLength = data.history.length;
+      if (historyLength !== history.length) {
+        historyLength = history.length;
         const body = document.getElementById("history");
         body.replaceChildren();
-        for (const row of [...data.history].reverse()) {
+        for (const row of [...history].reverse()) {
           const tr = document.createElement("tr");
           const values = [row.episode + " · " + new Date(row.timestamp).toLocaleString("tr-TR"),
-            row.turn_order === "sequential" ? "Sıralı" : "Eşzamanlı (önceki)",
+            row.steps,
             row.food_pairs, row.seed ?? "Rastgele", row.metric === "Euclidean" ? "Öklid" : "Manhattan",
-            row.alpha, row.gamma, row.epsilon.toFixed(3), row.steps, row.green, row.red, row.reward,
+            row.alpha, row.gamma, row.epsilon.toFixed(3), row.green, row.red, row.reward,
             ...row.agents.map(agent => agent.reward + " / " + agent.speed)];
           for (const value of values) {
             const td = document.createElement("td");
