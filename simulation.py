@@ -117,6 +117,7 @@ class Simulation:
     def new_episode(self) -> None:
         self.step_count = 0
         self.next_agent_index = 0
+        self.pending: dict[int, tuple[str, int, int]] = {}
         self.last_updates: list[dict] = []
         self.metric = self.rng.choice(("Manhattan", "Euclidean"))
         cells = self.rng.sample(range(BOARD_SIZE ** 2), self.food_pairs * 2 + 3)
@@ -153,14 +154,29 @@ class Simulation:
                      default=observation.position)
         dx, dy = target[0] - observation.position[0], target[1] - observation.position[1]
         sx, sy = (dx > 0) - (dx < 0), (dy > 0) - (dy < 0)
-        red_mask = sum(1 << action for action in range(4) if self.project(observation, action)[1])
-        competition = int(manhattan(observation.nearest_agent, target)
-                          <= manhattan(observation.position, target))
-        key = f"{agent.agent_id}|{sx},{sy}|v{agent.speed}|r{red_mask}|c{competition}"
+        distance = abs(dx) + abs(dy)
+        red_mask = green_mask = progress_mask = 0
+        for action in range(4):
+            destination, hits_red = self.project(observation, action)
+            bit = 1 << action
+            if hits_red:
+                red_mask |= bit
+            if destination in observation.green_foods:
+                green_mask |= bit
+            if manhattan(destination, target) < distance:
+                progress_mask |= bit
+        competition = int(manhattan(observation.nearest_agent, target) <= distance)
+        key = (f"{agent.agent_id}|{sx},{sy}|v{agent.speed}|r{red_mask}"
+               f"|g{green_mask}|p{progress_mask}|c{competition}")
         # A small initial preference uses visible food; experience replaces these values.
-        initial = [0.1 * (x * sx + y * sy) - 0.5 * bool(red_mask & (1 << action))
-                   for action, (x, y) in enumerate(DELTAS)]
-        initial[-1] = -0.05
+        initial = []
+        for action in range(4):
+            bit = 1 << action
+            value = 0.1 if progress_mask & bit else -0.1
+            value += 0.4 if green_mask & bit else 0.0
+            value -= 0.5 if red_mask & bit else 0.0
+            initial.append(value)
+        initial.append(-0.05)
         return key, self.memory.values(key, initial)
 
     def choose_action(self, values: list[float]) -> int:
@@ -186,19 +202,21 @@ class Simulation:
 
     def step(self) -> dict | None:
         """Run one agent's action; agents 1, 2, 3 together make one turn."""
+        self.last_updates = []
         agent = self.agents[self.next_agent_index]
         key, values = self.state_values(agent, self.observation_for(agent))
+        self._learn_pending(agent.agent_id, values)
         action = self.choose_action(values)
         reward = self.move(agent, action)
+        self.pending[agent.agent_id] = (key, action, reward)
         self.next_agent_index = (self.next_agent_index + 1) % len(self.agents)
         if self.next_agent_index == 0:
             self.step_count += 1
         terminal = not self.green_foods or self.step_count >= self.MAX_EPISODE_STEPS
-        next_values = [] if terminal else self.state_values(agent, self.observation_for(agent))[1]
-        update = self.memory.learn(key, action, reward, next_values, terminal)
-        self.last_updates = [{"agent": agent.agent_id, **update}]
         if not terminal:
             return None
+        for agent_id in tuple(self.pending):
+            self._learn_pending(agent_id)
         epsilon = self.memory.epsilon
         self.memory.episodes += 1
         result = {
@@ -219,5 +237,13 @@ class Simulation:
                         "reward": agent.reward} for agent in self.agents],
         }
         self.memory.history.append(result)
+        updates = self.last_updates
         self.new_episode()
+        self.last_updates = updates
         return result
+
+    def _learn_pending(self, agent_id: int, next_values: list[float] | None = None) -> None:
+        transition = self.pending.pop(agent_id, None)
+        if transition is not None:
+            update = self.memory.learn(*transition, next_values or [], terminal=next_values is None)
+            self.last_updates.append({"agent": agent_id, **update})

@@ -3,3 +3,6 @@ __pycache__/
 *.py[cod]
 /learning_memory.json
 /learning_memory.json.tmp
+/learning_memory_v2.json
+/learning_memory_v2.json.tmp
+/hw.txt

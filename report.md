@@ -25,9 +25,7 @@ Projede tek öğrenme yöntemi, tablo tabanlı **Q-learning** kullanılır. Bir 
 | Yeşil +1, kırmızı −1; bağımsız ödül | Yiyecek ödülü yalnızca toplayan ajana; Q güncellemesi yalnızca hamleyi yapan ajana aittir | `Agent.reward`, `move()`, `LearningMemory.learn()` |
 | Sabit hamle sırası | Her turda ajan 1 → ajan 2 → ajan 3; her hamle sonrasında yeşil kontrolü | `Simulation.step()` |
 
-Ödev öğrenmenin hangi algoritmayla yapılacağını zorunlu kılmıyor. Küçük bir durum tablosuyla ödüle dayalı güncelleme yapılabildiği için Q-learning kullanılmıştır. Ayrıca bir örüntü bulucu veya ikinci öğrenme algoritması bulunmaz.
-
-**Yürütme modeli:** Ajanlar sırayla hareket eder. Bu nedenle özgün ödev metnindeki eşzamanlı yiyecek rekabetinde sola hareketin öncelikli olması kuralı uygulanmaz. Sıralı modelde yiyeceği önce ulaşan ajan alır; sonraki ajanlar güncel tahtaya göre karar verir.
+Öğrenme yöntemi olarak tablo tabanlı Q-learning seçildi. Ajanlar sabit sırayla hareket eder. Yiyeceği önce ulaşan ajan alır ve sıradaki ajan güncel tahtaya göre karar verir.
 
 ## 2. Yazılım bileşenleri ve sorumlulukları
 
@@ -36,10 +34,9 @@ Projede tek öğrenme yöntemi, tablo tabanlı **Q-learning** kullanılır. Bir 
 | `simulation.py` | Ajanlar, tahta, gözlem, hareket, ödül, öğrenme ve JSON belleği |
 | `app.py` | Yerel web sunucusu; HTML ile simülasyon arasındaki iletişim |
 | `index.html` | Tahtayı çizme, düğmeler, ayarlar, öğrenme ve bölüm sonuçları |
-| `hw.txt` | Verilen özgün ödev metni |
 | `README.md` | Kurulum ve çalıştırma kılavuzu |
 | `report.md` | Projenin kavramları, yöntemi ve bileşenlerini açıklayan sunum raporu |
-| `learning_memory.json` | Çalıştırınca oluşan öğrenme verisi |
+| `learning_memory_v2.json` | Çalıştırınca oluşan öğrenme verisi |
 
 Python, oyunun gerçek durumunu tutar. HTML üzerindeki bir daireyi çizmek o ajanı hareket ettirmez; önce Python konumu değiştirir, sonra HTML yeni koordinatı ekranda gösterir. Böylece oyun kuralları tek yerde bulunur.
 
@@ -276,15 +273,17 @@ Tahtanın her olası düzeni için ayrı öğrenme tablosu açmak çok büyük b
 | `sx,sy` | Hedefin yatay/dikey yönü: −1, 0, +1 | Hedefe hangi yönlerde yaklaşılacağını özetler |
 | `v` | Ajanın hızı | Aynı hareket hızla birlikte farklı sonuç verir |
 | `r` | Dört hareket yönündeki kırmızı risklerinin bit maskesi | Yakındaki tehlikeleri ayırt eder |
+| `g` | Bu hamlede bir yeşil toplayan yönlerin bit maskesi | Hemen ödül getiren hamleleri ayırt eder |
+| `p` | Hedefe Manhattan uzaklığını azaltan yönlerin bit maskesi | Hız, tahta sınırı ve yiyecekte durmanın gerçek etkisini gösterir |
 | `c` | Görünen rakip hedefe en az bizim kadar yakın mı? | Rekabeti öğrenilen duruma dahil eder |
 
 Örnek anahtar:
 
 ```text
-1|1,-1|v2|r4|c1
+1|1,-1|v2|r4|g0|p9|c1
 ```
 
-Bunu şöyle okuruz: “Ajan 1, hedef sağ üstte, hız 2, sol yönünde kırmızıya çarpma riski var ve görünen rakip hedefe en az bizim kadar yakın.”
+Ajan 1'in hızı 2. Hedef sağ üstte ve görünen rakip hedefe en az ajan 1 kadar yakın. Sol hamle kırmızıya denk geliyor (`r4`). Tek hamlede toplanabilecek yeşil yok (`g0`). Yukarı ve sağ hamleler hedefe yaklaştırıyor (`p9 = 1 + 8`).
 
 ### İşaret bilgisini nasıl çıkardık?
 
@@ -298,18 +297,18 @@ Python'da doğru `1`, yanlış `0` gibi davranır. `dx` pozitifse `1 − 0 = 1`;
 
 Dört ayrı evet/hayır bilgisini tek sayıda tutuyoruz:
 
-| Yön | Risk varsa eklenen sayı |
+| Yön | İlgili özellik varsa eklenen sayı |
 |---|---:|
 | Yukarı | 1 |
 | Aşağı | 2 |
 | Sol | 4 |
 | Sağ | 8 |
 
-Sol ve sağ riskliyse `r = 4 + 8 = 12` olur. `1 << action`, ilgili sayıyı üretir. `red_mask & (1 << action)` o yöndeki risk bitinin açık olup olmadığını kontrol eder. Risk, `project()` ile ajanın kendi hızı ve görünür yiyecekler kullanılarak hesaplanır; yiyeceğin arkasına geçilmiş varsayılmaz.
+Sol ve sağ riskliyse `r = 4 + 8 = 12` olur. `1 << action` ilgili sayıyı üretir. Üç maske aynı kodlamayı kullanır. `project()` her yön için ajanın hızını, sınırı ve ilk karşılaşılan yiyecekte durmayı hesaba katar. Örneğin hız 1 iken bir hücre sağdaki yeşil `g8` ve `p8` üretir. İki hücre sağdaki yeşil için `g0` ve `p8` elde edilir.
 
 `c` için rakibin ve bizim hedefe Manhattan uzaklıklarımız karşılaştırılır. Hızı bilinmeyen rakip için gerçek varış süresi tahmin etmiyoruz. Rakip, bölümde rastgele seçilen ölçüyle gözleme alınmıştır; hedef rekabetini özetlerken yine Manhattan kullanırız.
 
-Bu sıkıştırmanın bedeli vardır: farklı tahtalar aynı anahtara dönüşebilir. Örneğin hedef bir hücre veya on hücre sağda olsa da yön aynı olabilir. Yöntem bu yüzden yaklaşık öğrenir; bütün tahtalar için en iyi kararı garanti etmez.
+Farklı tahtalar hâlâ aynı anahtara dönüşebilir. Örneğin hız 1 iken iki ve on hücre sağdaki hedefler, diğer özellikler eşitse aynı durumu üretir. Ajanın görmediği rakiplerin hamleleri de sonraki tahtayı değiştirebilir.
 
 ## 14. Q tablosu nasıl tutuluyor?
 
@@ -317,7 +316,7 @@ Bu sıkıştırmanın bedeli vardır: farklı tahtalar aynı anahtara dönüşeb
 
 ```json
 {
-  "1|1,-1|v2|r4|c1": [0.1, -0.1, -0.6, 0.1, -0.05]
+  "1|1,-1|v2|r4|g0|p9|c1": [0.1, -0.1, -0.6, 0.1, -0.05]
 }
 ```
 
@@ -327,7 +326,7 @@ Aynı anahtara ait `visits` listesi, her eylemin kaç defa gerçekten öğrenme 
 
 ```json
 {
-  "1|1,-1|v2|r4|c1": [3, 0, 1, 7, 0]
+  "1|1,-1|v2|r4|g0|p9|c1": [3, 0, 1, 7, 0]
 }
 ```
 
@@ -339,23 +338,11 @@ Bir sonraki durumun değerlerine bakarken de yeni satır oluşturulabilir. Dolay
 
 ## 15. Ajan ilk anda hiçbir şey bilmiyorsa nasıl hareket ediyor?
 
-Yeni bir durumun bütün Q değerlerini sıfır başlatmak mümkün. Fakat 50 × 50 tahtada seyrek yiyeceklerle tamamen amaçsız dolaşmak ilk denemeleri uzatır. Görünür yiyecek bilgisinden yararlanan küçük bir **başlangıç tercihi** veriyoruz:
+Yeni durumlarda başlangıç Q değerleri, ajanın o anda gördüğü yiyeceklerden hesaplanır. Hedefe yaklaşan yön +0,1, diğer yönler −0,1 ile başlar. Hamle bir yeşil toplarsa 0,4 eklenir. Kırmızıya denk gelirse 0,5 çıkarılır. Bekleme değeri −0,05'tir.
 
-```python
-initial = [
-    0.1 * (x * sx + y * sy) - 0.5 * bool(red_mask & (1 << action))
-    for action, (x, y) in enumerate(DELTAS)
-]
-initial[-1] = -0.05
-```
+Örneğin sağ hamle hedefe yaklaşıp yeşili de topluyorsa başlangıç değeri `0,1 + 0,4 = 0,5` olur. Sağa gitmek hedefe yaklaştırdığı halde araya kırmızı giriyorsa başlangıç değeri `0,1 − 0,5 = −0,4` olur.
 
-Hedefe doğru yön +0,1, hedeften uzaklaşan yön −0,1 alabilir. Kırmızıya çarpacak yönün başlangıç değeri ayrıca 0,5 azaltılır. Eylemsiz bekleme −0,05 ile başlar.
-
-Örneğin hedef sağdaysa sağ hareketin başlangıç tercihi +0,1 olur. Sağda kırmızı riski varsa bu `0,1 − 0,5 = −0,4` olur.
-
-Bu değerler **öğrenilmiş deneyim değildir**; bizim verdiğimiz küçük ön bilgidir. `LearningMemory.values()` yalnızca daha önce görülmeyen bir anahtarda bu listeyi ekler. Aynı anahtar yeniden geldiğinde başlangıç değerlerini tekrar yazmaz; mevcut öğrenilmiş değerleri kullanır.
-
-Gerçek çevre ödülü hâlâ yalnızca +1, −1 veya 0'dır. Hedefe yaklaşmak için ayrı bir gerçek ödül eklemiyoruz. Başlangıçta verilen yön tercihleri, Q güncellemeleriyle değişir. Bu yüzden gözlenen davranış hem başlangıç bilgisinin hem de sonraki deneyimin sonucudur.
+`LearningMemory.values()` bu değerleri durum ilk kez görüldüğünde kaydeder. Sonraki ziyaretlerde güncellenmiş Q değerleri kullanılır. Çevrenin verdiği ödül, hamlede alınan yiyeceğe göre +1, −1 veya 0'dır. Başlangıç tercihleri yalnızca henüz deneyim oluşmamış durumlarda davranışı yönlendirir.
 
 ## 16. Ajan hangi eylemi seçiyor: ε-greedy
 
@@ -388,10 +375,14 @@ max(0.05, 0.20 * 0.97 ** episodes)
 
 ## 17. Q-learning matematiğini adım adım anlayalım
 
-Kullandığımız güncelleme:
+`Q(s,a)`, ajan `s` durumunda `a` eylemini yaptığında kendi hamleleri boyunca almayı beklediği iskonto edilmiş toplam ödülün tahminidir. Bir yeşil iki karar sonra toplanabiliyorsa, o yeşilin bugünkü tahmine katkısı `γ² × 1` olur. `γ = 0,90` için bu değer 0,81'dir. Bu sayede Q değeri, anında yiyecek bulamayan bir hazırlık hamlesini de değerlendirebilir.
+
+Güncellemede önce hedef, ardından zamansal fark (`δ`) hesaplanır:
 
 ```text
-Q_yeni(s,a) = Q_eski(s,a) + α × [r + γ × max Q(s′,a′) − Q_eski(s,a)]
+hedef = r + γ × max Q(s′,a′)
+δ = hedef − Q_eski(s,a)
+Q_yeni(s,a) = Q_eski(s,a) + α × δ
 ```
 
 Sembollerin anlamı:
@@ -401,7 +392,7 @@ Sembollerin anlamı:
 | `s` | Hareketten önceki durum | Durum anahtarı |
 | `a` | Yapılan hareket | Beş eylemden biri |
 | `r` | Bu harekette alınan ödül | +1, −1 veya 0 |
-| `s′` | Hareketten sonraki durum | Yeni gözlemden hesaplanır |
+| `s′` | Aynı ajanın bir sonraki karar anındaki durum | Diğer ajanlar oynadıktan sonra alınan gözlem |
 | `max Q(s′,a′)` | Yeni durumda tahmini en iyi gelecek | Beş Q değerinin en büyüğü |
 | `α` | Yeni bilgiye ne kadar ağırlık verelim? | 0,20 |
 | `γ` | Gelecekteki ödülü ne kadar önemseyelim? | 0,90 |
@@ -413,6 +404,12 @@ Sembollerin anlamı:
 ### γ ne işe yarar?
 
 Gelecek ödülün ağırlığıdır. Ajan sadece hemen yanındaki ödüle değil, sonraki hareketlerde beklenen ödüle de değer verir. Örneğin yeni durumun en iyi Q değeri 0,4 ise bunun hedefe katkısı `0,9 × 0,4 = 0,36` olur.
+
+### Sonraki gözlem neden ajanın kendi sırasında alınır?
+
+Ajan 1 bir yeşile yaklaşsın ve ödülü 0 olsun. Ajan 2 arada o yeşili alırsa, ajan 1'in bir sonraki kararında o yiyecek artık tahtada yoktur. Ajan 1'in eski hamlesi, yeni sırada gördüğü tahtadan hesaplanan en yüksek Q ile güncellenir. Kayıtta bu hamlenin durum anahtarı, eylemi ve kendi ödülü bulunur. Ajan 2'nin topladığı yeşil için +1 yalnızca ajan 2'ye yazılır.
+
+Güncel durumda beş Q değeri `[0,1; 0,4; −0,2; 0,2; −0,05]` ise gelecek tahmini 0,4'tür. Ödül 0 ve eski Q 0,1 olduğunda hedef 0,36, zamansal fark 0,26 ve yeni Q `0,1 + 0,2 × 0,26 = 0,152` olur. Bir sonraki hamlede keşif nedeniyle başka bir eylem seçilse bile bu güncelleme 0,4'ü kullanır. Q-learning'in **off-policy** olması, hedefin uygulanan keşif politikasından bağımsız olarak en iyi tahmini eylemi kullanması demektir.
 
 ### Sayısal örnek: yeşil topladık
 
@@ -446,7 +443,7 @@ Hedef = 1
 Yeni Q = 0,1 + 0,2 × (1 − 0,1) = 0,28
 ```
 
-4.000 tam tur sınırına gelmek de bölüm tanımında bitiştir. Bu sınır, üçüncü ajanın hamlesi tamamlandığında kontrol edilir; bölümü bitiren hamlede gelecek Q eklenmez.
+Son yeşil toplandığında veya 4.000 tam tur dolduğunda bölüm biter. Kendi sırası yeniden gelmemiş ajanların bekleyen hamleleri de kendi anlık ödülleriyle güncellenir. Bu güncellemelerin tümünde gelecek Q sıfırdır. Örneğin son yeşili başka bir ajan aldıysa ve önceki bekleyen hamlenin ödülü 0 ise, o hamlenin hedefi de 0'dır.
 
 ### Kodda karşılığı
 
@@ -460,7 +457,20 @@ values[action] += ALPHA * (target - old)
 self.visits[key][action] += 1
 ```
 
-Arayüzdeki son Q hesabı bu fonksiyonun döndürdüğü gerçek değerlerden gelir. Örnek bir animasyon veya uydurulmuş öğrenme göstergesi değildir. Bu sürümde uygunluk izi, ek yol araması veya ikinci öğrenme yöntemi yoktur.
+Arayüz, bu fonksiyonun son adımda hesapladığı eski Q, ödül, gelecek Q, hedef ve yeni Q değerlerini gösterir. Ziyaret sayısı yalnızca güncellenen durum-eylem çifti için 1 artar.
+
+### Neden tablo tabanlı Q-learning?
+
+Her ajanın beş ayrık eylemi ve küçük bir gözlem özeti var. Bir durum için beş sayıyı saklayabiliyoruz. Bu sayede tek bir hamlenin hangi Q değerini ne kadar değiştirdiği arayüzde ve JSON kaydında incelenebiliyor. Algoritma, rakiplerin karar kurallarını veya tahta geçişlerinin olasılıklarını modellemeden, gözlenen geçişlerden öğrenebiliyor.
+
+| Yöntem | Bu proje için değerlendirme |
+|---|---|
+| En yakındaki yeşile giden sabit sezgisel politika | Kolayca uygulanır ve eğitim için karşılaştırma noktası sağlar. Deneyim biriktirip sonraki kararlarını değiştirmez. |
+| SARSA | Benzer bir Q tablosu kullanır. Hedefinde, sırada gerçekten seçilen eylemin Q değeri vardır. Bu projede keşif hamleleri yapılırken en iyi tahmini eylemin değerini öğrenmek istediğimiz için Q-learning seçildi. |
+| Monte Carlo ile öğrenme | Bir hamlenin değerini bölüm tamamlandıktan sonra gerçekleşen ödül toplamıyla güncelleyebilir. Bölüm 4.000 tura kadar sürebildiğinden güncellemeleri aynı ajanın bir sonraki kararı geldiğinde yapmak tercih edildi. |
+| Deep Q-Network (DQN) | Tablo yerine sinir ağıyla değer tahmin eder. Ham tahta veya daha büyük gözlemler kullanılsaydı değerlendirilebilirdi. Eldeki durum özeti tabloyla saklanabiliyor ve tablodaki her güncelleme doğrudan izlenebiliyor. |
+
+Tam tahta ve diğer ajanların kararları durum anahtarına sığmadığından aynı gözlem farklı sonuçlar doğurabilir. Eğitim başarısını bu yüzden yeni tahtalarda, eğitimsiz başlangıç politikasıyla karşılaştırarak ölçüyoruz.
 
 ## 18. Hamle, tur ve bölüm akışı
 
@@ -469,12 +479,10 @@ Arayüzdeki son Q hesabı bu fonksiyonun döndürdüğü gerçek değerlerden ge
 Bu ayrım, her ajan hamlesinin ayrı gözlemlenmesini ve son yiyeceğin alındığı anda bölümün bitirilmesini sağlar. `Simulation.step()` tek hamle yürütür:
 
 1. Sırası gelen ajan için mevcut tahtadan gözlem ve durum değerleri hazırlanır.
-2. Ajan, kendi Q değerleri ve ε ile bir eylem seçer.
-3. `move()` yalnızca o ajanı hareket ettirir ve kişisel ödülünü döndürür.
-4. Yeşillerin bitip bitmediği kontrol edilir. Ajan 3 hamlesini tamamladıysa tur sayacı ilerler ve 4.000 tur sınırı da değerlendirilir.
-5. Yalnızca hareket eden ajanın Q satırı güncellenir. Bölüm bittiyse gelecek değer sıfırdır.
-6. Bölüm sürüyorsa sıra ajan 1'den 2'ye, 2'den 3'e, 3'ten sonraki turun ajan 1'ine geçer.
-7. Bölüm bittiyse kalan ajanların hamleleri atlanır; sonuç geçmişe eklenir ve yeni bölüm ajan 1 ile başlar.
+2. Ajanın önceki hamlesi bekliyorsa, bu gözlemin Q değerleriyle güncellenir.
+3. Ajan kendi Q değerleri ve ε ile yeni eylemini seçer. `move()` kişisel ödülü verir ve hamle öğrenme için beklemeye alınır.
+4. Yeşiller bittiğinde veya üçüncü ajanın hamlesiyle 4.000 tur tamamlandığında bölüm sona erer. Bekleyen hamleler gelecek Q sıfır alınarak güncellenir.
+5. Bölüm sürüyorsa sıra bir sonraki ajana geçer. Bölüm bittiyse sonuç geçmişe eklenir ve yeni tahta ajan 1 ile açılır.
 
 Üç ajanın gözlem ve kararları tur başında topluca hazırlanmaz. Ajan 2, ajan 1'in hareketinden sonraki tahtayı; ajan 3 de ilk iki ajanın hamlelerinden sonraki tahtayı gözlemler.
 
@@ -484,12 +492,12 @@ Devam eden bölümde `step_count` tamamlanan tam turları sayar. Bölümün sonu
 
 Ajan 1 `(4, 5)` konumunda, hızı 2, son yeşil `(6, 5)` hücresinde olsun. Eylem seçiminin sağ olduğunu varsayalım; keşif varsa başka hareket de seçilebilir.
 
-- Hedef sağdadır; yeni bir durumsa sağın başlangıç Q değeri +0,1 olabilir.
+- Sağ hamle hedefe yaklaşıp yeşili toplar. Durum ilk kez görülüyorsa sağın başlangıç Q değeri +0,5'tir.
 - Ajan önce `(5, 5)`, sonra `(6, 5)` hücresine gider.
 - Yeşil silinir; yalnızca ajan 1 +1 alır.
 - Tahtada yeşil kalmadığı için bölüm biter.
-- Gelecek Q sıfır alınır; başlangıç 0,1 ise yeni Q 0,28 olur.
-- Ajan 2 ve ajan 3 hareket etmez; yapmadıkları hamleler için Q güncellemesi almazlar.
+- Gelecek Q sıfır alınır. Başlangıç 0,5 ise yeni Q `0,5 + 0,2 × (1 − 0,5) = 0,6` olur.
+- Ajan 2 ve ajan 3 bu turda hareket etmez. Önceki turdan bekleyen hamleleri varsa bu hamlelerin Q değerleri de güncellenir.
 - Bölüm sonucu belleğin geçmiş listesine eklenir ve yeni tahta hazırlanır.
 
 Yeni bölüm açılırken Q tablosu sıfırlanmaz. **Tahta değişir, öğrenilmiş deneyim kalır.**
@@ -516,14 +524,14 @@ JSON içindeki Q listelerinde hangi indeksin hangi harekete ait olduğu `ACTIONS
 
 Öğrenmeyi sürdürmek için güncel Q değerleri ve ziyaret sayıları yeterlidir. Her adımın tüm konumlarını kaydetmek çok daha fazla veri üretirdi. Bu yüzden:
 
-- Q tablosu her simülasyon adımında bellekte güncellenir.
-- Arayüz son adımın gerçek hesaplamasını gösterir.
+- Q tablosu, ajanın önceki hamlesine ait geçiş tamamlandığında bellekte güncellenir.
+- Arayüz son adımda yapılan güncellemeleri gösterir.
 - Bütün tamamlanmış bölümlerin sonuçları tarihçede saklanır.
 - Her adımın önceki Q sürümü ve tahta görüntüsü ayrı ayrı arşivlenmez.
 
 ### Dosyanın yarım yazılmasını nasıl önlüyoruz?
 
-Önce `learning_memory.json.tmp` yazılır, sonra asıl dosyayla değiştirilir:
+Önce `learning_memory_v2.json.tmp` yazılır, sonra asıl dosyayla değiştirilir:
 
 ```python
 temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -536,7 +544,7 @@ Kaydetme; bölüm sonunda, duraklatınca, yeni bölüm düğmesine basınca ve t
 
 `LearningMemory.load()` dosya varsa okur; yoksa boş bellekle başlar. Yükleme sırasında sıralı akışa ait olmayan geçmiş kayıtları ayıklanır ve temizlenmiş veri dosyaya kaydedilir. Dosya bozuksa veya sürümü desteklenmiyorsa hata verir; sessizce öğrenmeyi sıfırlamaz.
 
-Uygulamanın kullandığı kalıcı öğrenme dosyası `learning_memory.json` dosyasıdır. Bu dosya yerel çalışma verisi olduğu için `.gitignore` içinde tutulur.
+Yeni durum anahtarlarının Q değerleri `learning_memory_v2.json` dosyasında tutulur. İlk çalıştırmada yeni bir bellek açılır ve eski `learning_memory.json` yerelde saklanır. Tahta ve sırayı bekleyen hamleler çalışma belleğine aittir. Uygulama yeniden açıldığında veya kullanıcı elle yeni bölüm başlattığında, bu hamleler atılır ve kaydedilmiş Q değerleriyle yeni bir tahta kurulur.
 
 ### Seed kaydını doğru yorumlayalım
 
@@ -594,7 +602,7 @@ Bir kontrol isteği sürerken düğmeleri geçici olarak devre dışı bırakır
 
 ### `render()`
 
-Sunucudan gelen durumu metinlere ve tabloya dönüştürür. Skorları tarayıcıda yeniden hesaplamak yerine Python'daki gerçek değerleri gösterir. Tamamlanan tur sayısı, sıradaki ajan ve son hamlenin eski/yeni Q değerleri de burada yazılır.
+Sunucudan gelen skorları ve tahta durumunu metinlere ve tabloya dönüştürür. Tamamlanan tur sayısını, sıradaki ajanı ve son adımda güncellenen hamlelerin eski ve yeni Q değerlerini gösterir.
 
 Eğitim geçmişi, yeni bir sonuç eklendiğinde yeniden oluşturulur. Her satırda parametreler ve üç ajanın kendi ödül/hız bilgisi bulunur. Bölüm bilgisinin hemen yanındaki **Bitiş turu** sütunu, sonuç kaydının `steps` alanını gösterir; bölümün son kısmi turu da bu sayıya dâhildir. Toplam puan bütün ajanların ödüllerinin toplamıdır.
 
@@ -640,6 +648,18 @@ Aynı yiyecek sayısı ve aynı sıralı akışla en az 20 tamamlanmış bölüm
 
 Rastgele yerleşim, hızlar ve azalan keşif oranı da sonucu etkiler. Bu nedenle ortalama ödüldeki artışın tamamını yalnızca Q-learning'e bağlamak doğru değildir. Daha güçlü bir deney için aynı başlangıç koşullarında tekrarlı çalışmalar ve öğrenmenin kapalı olduğu bir kontrol politikası gerekir. Proje, bütün yeni tahtalarda sürekli iyileşme veya en iyi politika garantisi vermez.
 
+### Kontrollü deneme
+
+Yeni durum anahtarlarıyla her renkten 40 yiyeceğin yer aldığı tahtalarda eğitim yaptık. Eğitim bölümlerinin seed değerleri 0–59, test tahtalarının seed değerleri 100–111'di. Her test tahtası için aynı başlangıç koşullarını yeniden kurduk. Test sırasında eğitim güncellemelerini kapattık ve her politika için keşif oranını %5'e sabitledik. Eğitimsiz politika, sadece bölüm 15'teki başlangıç tercihlerini kullandı.
+
+| Önceki eğitim bölümü | Ortalama yeşil | Ortalama kırmızı | Ortalama net ödül | Ortalama tur | Bütün yeşillerin toplandığı tahta |
+|---:|---:|---:|---:|---:|---:|
+| 0 | 36,25 | 1,92 | 34,33 | 1.171,58 | 9/12 |
+| 20 | 39,67 | 2,75 | 36,92 | 650,00 | 11/12 |
+| 60 | 40,00 | 1,67 | 38,33 | 678,00 | 12/12 |
+
+Bu testte 60 bölümlük eğitimle ortalama net ödül 4 puan yükseldi ve bütün yeşiller 12 tahtanın tamamında toplandı. 20 bölümlük politika ortalamada daha kısa sürdü ve daha çok kırmızı topladı. Sonuçlar bu yiyecek yoğunluğu ve bu 12 tahta için geçerlidir. Deneme, iki değişikliğin etkisini ayrı ayrı ölçmez.
+
 ## 23. Sınırlamalar ve tasarım kararları
 
 - Tek öğrenme yöntemi Q-learning'dir; rota algoritması kıyası ve sinir ağı yoktur.
@@ -666,12 +686,12 @@ HTML düğmesi / zamanlayıcı
     → HTTP isteği
     → app.py doğrulaması
     → Simulation.step()
-    → sıradaki ajan: gözlem → eylem → hareket → kişisel ödül
+    → sıradaki ajan: gözlem → önceki hamlenin Q güncellemesi
+    → yeni eylem → hareket → kişisel ödül → hamleyi beklemeye al
     → yeşillerin bitiş kontrolü / tur sonu sınır kontrolü
-    → Q tablosunun güncellenmesi
-    → bölüm bittiyse geçmiş ve JSON kaydı
+    → bölüm bittiyse bekleyen hamleleri güncelle, geçmiş ve JSON kaydı
     → HTTP cevabı
     → HTML metinleri ve tahtanın yeniden çizilmesi
 ```
 
-Proje, rastgele oluşturulan bir tahtada üç ajanın bağımsız ödüllerle öğrenmesini sağlar. Ajanlar 1 → 2 → 3 sırasıyla hareket eder; her biri güncel gözlemini küçük bir durum temsiline dönüştürüp Q tablosuyla eylem seçer. Her hamlenin ardından yeşiller kontrol edilir ve yalnızca hareket eden ajanın deneyimi güncellenir. Kalıcı JSON belleği öğrenmenin yeni bölümlerde sürmesini; web arayüzü ise hareketlerin, Q hesaplarının ve sonuçların izlenmesini sağlar.
+Demoda ajan 1'in bir hamlesini ve ardından ajan 2 ile 3'ün tahtada yaptığı değişiklikleri izleyin. Sıra tekrar ajan 1'e geldiğinde Q paneli, önceki hamlesinin ödülünü ve yeni gözlemden hesaplanan gelecek Q değerini gösterir. Son yeşil alındığında panelde bekleyen hamlelerin sıfır gelecek Q ile nasıl tamamlandığı görülür.
