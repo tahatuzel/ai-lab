@@ -49,7 +49,7 @@
         <span><i class="mark" style="background:#7c3aed"></i>Ajan 2</span>
         <span><i class="mark" style="background:#f97316"></i>Ajan 3</span>
       </div>
-      <p>Ajanlar her turda 1 → 2 → 3 sırasıyla hamle yapar. Her hamleden sonra yeşiller kontrol edilir; biterse bölüm hemen sona erer. Kesikli çizgi, ajanın görebildiği en yakın rakibi gösterir.</p>
+      <p>Ajanlar her turda 1 → 2 → 3 sırasıyla hareket eder. Her ajan hızı kadar adım hakkı kullanır ve her adımda yeniden yön seçer. Son yeşil toplanınca bölüm biter. Kesikli çizgi, görünen en yakın rakibi gösterir.</p>
     </section>
     <aside>
       <section class="card">
@@ -63,9 +63,9 @@
           <input id="food-pairs" type="number" min="1" max="375" step="1" value="125" required>
           <p>Yiyecek sayısını değiştirdikten sonra “Uygula / Yeni bölüm”e basın. Tahta yenilenir; öğrenilen değerler korunur.</p>
         </form>
-        <label for="steps">Yenileme başına ajan hamlesi: <output id="steps-value">1</output></label>
+        <label for="steps">Yenileme başına ajan adımı: <output id="steps-value">1</output></label>
         <input id="steps" type="range" min="1" max="20" value="1">
-        <p>1 değerinde her ajanın hamlesi ayrı gösterilir. Daha yüksek değerlerde hamleler sırayla hesaplanır ve son durum çizilir.</p>
+        <p>1 değerinde her adım ayrı gösterilir. Daha yüksek değerlerde adımlar sırayla hesaplanır ve son durum çizilir.</p>
         <p id="error" role="alert"></p>
       </section>
       <section class="card">
@@ -74,7 +74,7 @@
       </section>
       <details class="card">
         <summary>Öğrenme nasıl değişiyor?</summary>
-        <p>Her ajan önceki hamlesinin Q değerini bir sonraki sırasında günceller. Bölüm bittiğinde bekleyen hamleler için gelecek Q sıfır alınır. Aşağıda son adımda yapılan güncellemeler gösterilir.</p>
+        <p>Her ajan bir sonraki adımını seçmeden önce önceki adımının Q değerini günceller. Bölüm bittiğinde bekleyen adımlar için gelecek Q sıfır alınır.</p>
         <pre id="learning"></pre>
         <p><a href="/api/memory" target="_blank" rel="noopener">Tüm öğrenme belleğini JSON olarak aç</a></p>
       </details>
@@ -175,7 +175,8 @@
       toggleButton.textContent = data.running ? "Duraklat" : "Başlat";
       const lines = [
         "Bölüm: " + data.episode + " · tamamlanan tur: " + data.step,
-        "Sıradaki hamle: tur " + (data.step + 1) + " · Ajan " + data.next_agent,
+        "Sıradaki hamle: tur " + (data.step + 1) + " · Ajan " + data.next_agent + " · adım " +
+          data.next_agent_step + "/" + data.agents[data.next_agent - 1].speed,
         "En yakın rakip: " + (data.metric === "Euclidean" ? "Öklid" : "Manhattan"),
         "Uygulanan yiyecek sayısı: " + data.food_pairs + " / renk",
         "Kalan yeşil: " + data.green_foods.length + " · kırmızı: " + data.red_foods.length, ""

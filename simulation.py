@@ -118,6 +118,7 @@ class Simulation:
     def new_episode(self) -> None:
         self.step_count = 0
         self.next_agent_index = 0
+        self.agent_steps_taken = 0
         self.pending: dict[int, tuple[str, int, int]] = {}
         self.last_updates: list[dict] = []
         self.metric = self.rng.choice(("Manhattan", "Euclidean"))
@@ -137,17 +138,13 @@ class Simulation:
 
     @staticmethod
     def project(observation: Observation, action: int) -> tuple[Position, bool]:
-        """Predict an action using only the information visible to this agent."""
-        position = observation.position
+        """Predict one cell of movement using the agent's observation."""
+        x, y = observation.position
         dx, dy = DELTAS[action]
-        for _ in range(observation.speed):
-            destination = position[0] + dx, position[1] + dy
-            if not (0 <= destination[0] < BOARD_SIZE and 0 <= destination[1] < BOARD_SIZE):
-                break
-            position = destination
-            if position in observation.green_foods or position in observation.red_foods:
-                break
-        return position, position in observation.red_foods
+        destination = x + dx, y + dy
+        if not (0 <= destination[0] < BOARD_SIZE and 0 <= destination[1] < BOARD_SIZE):
+            destination = observation.position
+        return destination, destination in observation.red_foods
 
     def state_values(self, agent: Agent, observation: Observation) -> tuple[str, list[float]]:
         targets = nsmallest(2, observation.green_foods,
@@ -170,7 +167,10 @@ class Simulation:
             if manhattan(destination, target) < distance:
                 progress_mask |= bit
         competition = int(manhattan(observation.nearest_agent, target) <= distance)
-        key = (f"{agent.agent_id}|{sx},{sy}|v{agent.speed}|r{red_mask}"
+        steps_left = agent.speed
+        if agent is self.agents[self.next_agent_index]:
+            steps_left -= self.agent_steps_taken
+        key = (f"{agent.agent_id}|{sx},{sy}|v{agent.speed}|m{steps_left}|r{red_mask}"
                f"|g{green_mask}|p{progress_mask}|c{competition}")
         # Favor progress slightly. Food outcomes are learned from rewards.
         initial = [0.05 if progress_mask & (1 << action) else 0.0 for action in range(len(ACTIONS))]
@@ -183,7 +183,7 @@ class Simulation:
         return self.rng.choice([index for index, value in enumerate(values) if value == best])
 
     def move(self, agent: Agent, action: int) -> int:
-        """Finish one agent's move before the next agent can act."""
+        """Apply one action and return the reward for that step."""
         if action == 4:
             return 0
         agent.position, _ = self.project(self.observation_for(agent), action)
@@ -198,7 +198,7 @@ class Simulation:
         return 0
 
     def step(self) -> dict | None:
-        """Run one agent's action; agents 1, 2, 3 together make one turn."""
+        """Run one decision. An agent gets one decision per unit of speed."""
         self.last_updates = []
         agent = self.agents[self.next_agent_index]
         key, values = self.state_values(agent, self.observation_for(agent))
@@ -206,9 +206,12 @@ class Simulation:
         action = self.choose_action(values)
         reward = self.move(agent, action)
         self.pending[agent.agent_id] = (key, action, reward)
-        self.next_agent_index = (self.next_agent_index + 1) % len(self.agents)
-        if self.next_agent_index == 0:
-            self.step_count += 1
+        self.agent_steps_taken += 1
+        if self.agent_steps_taken == agent.speed:
+            self.agent_steps_taken = 0
+            self.next_agent_index = (self.next_agent_index + 1) % len(self.agents)
+            if self.next_agent_index == 0:
+                self.step_count += 1
         terminal = not self.green_foods or self.step_count >= self.MAX_EPISODE_STEPS
         if not terminal:
             return None
@@ -225,7 +228,7 @@ class Simulation:
             "alpha": ALPHA,
             "gamma": GAMMA,
             "epsilon": epsilon,
-            "steps": self.step_count + int(self.next_agent_index != 0),
+            "steps": self.step_count + int(self.next_agent_index != 0 or self.agent_steps_taken != 0),
             "turn_order": "sequential",
             "green": sum(agent.green for agent in self.agents),
             "red": sum(agent.red for agent in self.agents),

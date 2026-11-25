@@ -27,12 +27,14 @@ The browser opens automatically. If it does not, visit the `http://127.0.0.1:...
 - **Start / Pause:** Runs or pauses the simulation and learning. The simulation starts running by default.
 - **Food count per color:** Enter an integer from 1 to 375. For example, 125 means 125 green and 125 red items.
 - **Apply / New Episode:** Applies the food count and creates a new board. Learned Q values are kept. An unfinished episode is not saved as a completed episode.
-- **Agent moves per refresh:** At the default value of 1, each agent's move is shown separately. Increase it from 1 to 20 to speed up training; agent movement speeds of 1–3 cells do not change. At higher values, moves are still processed in order, but only the final state is displayed.
-- **Live status:** Shows the number of completed turns and the turn in which the next agent will move.
+- **Agent moves per refresh** controls how many single-cell decisions run per update. At 1, each decision is shown separately. Higher values speed up training and display the board after the last decision in the batch.
+- **Live status** shows completed turns, the next agent, and its position in the current sequence, such as step 2 of 3.
 - **How is learning changing?** Shows the reward and old and new Q values for moves updated in the latest step, along with the learning coefficients. Use the link to view the full memory as JSON.
 - **Training history:** Shows completed episodes from sequential runs. **Ending turn** next to the episode number tells you how many turns the episode took. The table also includes food count, starting seed, distance metric, α/γ/ε values, and each agent's score and speed. If there are enough episodes with the same food count, the average reward for the first and last 10 episodes is also shown.
 
-Agents take turns in the order **1 → 2 → 3**. Each agent decides based on the current board, including changes made by earlier moves. Green food is checked after every move. If the last green item is collected, the episode result is saved before the next agent moves, and a new episode starts with agent 1. The next turn begins after all three agents have moved. If green food remains, the episode ends after 4,000 full turns. The turn count in the history includes the final partial turn in which the green food ran out.
+Agents act in the order **1 → 2 → 3**. An agent with speed 1, 2, or 3 gets that many consecutive decisions before the next agent acts. Each decision uses the updated board and can move one cell in a new direction. Waiting and attempts to move past an edge each use one decision. Food is collected immediately, and the agent continues its remaining decisions unless it collected the last green item.
+
+A full turn finishes when all three agents have used their decisions. An episode ends immediately when the last green is collected or after 4,000 full turns. The history includes a final partial turn in the turn count.
 
 An agent targets the second-nearest green item if its visible opponent is closer to the nearest one. In a new Q state, moves that approach the selected target start at 0.05, and all other actions start at zero. The agent learns which moves lead to green and red food from their rewards.
 
@@ -48,11 +50,11 @@ To shut down the application completely, press `Ctrl+C` in the terminal. Closing
 
 ## Learning data file
 
-Each agent updates the Q value for its previous move when its turn comes around again, using the observation at that time. When an episode ends, pending moves use a future Q value of zero.
+An agent updates the Q value for its previous move when it makes its next decision. Within the same turn it uses the board immediately after its own move. If it already used its decisions, it waits for its next turn and learns from the board after the other agents have acted. At episode end, pending moves use a future Q value of zero.
 
-The application saves Q values, visit counts, and completed episode results to `learning_memory_v3.json`. It saves at the end of an episode, when paused, when a new episode starts, and when you exit with `Ctrl+C`. On the next launch, the application resumes learning from this file and creates a new board. Pending Q updates are discarded when the board is reset.
+The application saves Q values, visit counts, and completed episode results to `learning_memory_v4.json`. It saves at the end of an episode, when paused, when a new episode starts, and when you exit with `Ctrl+C`. On the next launch, the application resumes learning from this file and creates a new board. Pending Q updates are discarded when the board is reset.
 
-The new target selection and initial Q values use a fresh memory file. When this file is absent, training starts with an empty Q table and episode history. To start paused with 40 items of each color:
+The current state key includes the number of decisions remaining for the agent. When `learning_memory_v4.json` is absent, training starts with an empty Q table and episode history. To start paused with 40 items of each color, run the following command.
 
 ```powershell
 \.venv\Scripts\python.exe app.py --food-pairs 40 --paused

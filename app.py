@@ -12,7 +12,7 @@ from pathlib import Path
 from simulation import ALPHA, GAMMA, ACTIONS, BOARD_SIZE, MAX_FOOD_PAIRS, LearningMemory, Simulation
 
 PROJECT_DIR = Path(__file__).resolve().parent
-MEMORY_PATH = PROJECT_DIR / "learning_memory_v3.json"
+MEMORY_PATH = PROJECT_DIR / "learning_memory_v4.json"
 HTML_PATH = PROJECT_DIR / "index.html"
 
 
@@ -56,6 +56,7 @@ def make_handler(simulation: Simulation, auto_start: bool = True) -> type[BaseHT
                 "episode": memory.episodes + 1, "completed_episodes": memory.episodes,
                 "step": simulation.step_count, "metric": simulation.metric,
                 "next_agent": simulation.agents[simulation.next_agent_index].agent_id,
+                "next_agent_step": simulation.agent_steps_taken + 1,
                 "food_pairs": simulation.food_pairs,
                 "green_foods": sorted(simulation.green_foods),
                 "red_foods": sorted(simulation.red_foods),

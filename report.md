@@ -20,10 +20,10 @@ The project uses one learning method: tabular **Q-learning**. We do not train a 
 | Only the nearest opponent's position | The observation contains one opponent coordinate | `Simulation.observation_for()` |
 | Random choice of Manhattan or Euclidean distance | One metric is selected at the start of each episode | `new_episode()`, `observation_for()` |
 | Food is observable | Coordinates for all green and red items are included in the observation | `Observation` |
-| Random speed of 1–3 cells | Each agent receives a speed at the start of an episode | `new_episode()` |
+| Random speed of 1–3 cells | The speed gives each agent 1–3 consecutive single-cell decisions per turn | `new_episode()`, `step()` |
 | Up, down, left, right, and no action | Five discrete choices | `ACTIONS`, `DELTAS`, `move()` |
 | Green +1, red −1; independent rewards | Only the collecting agent receives the food reward; only the agent that made the move gets its Q update | `Agent.reward`, `move()`, `LearningMemory.learn()` |
-| Fixed move order | Agents 1 → 2 → 3 act each turn; green food is checked after every move | `Simulation.step()` |
+| Fixed move order | Agents 1 → 2 → 3 each use their decisions in order. Green food is checked after every decision | `Simulation.step()` |
 
 We chose tabular Q-learning as the learning method. Agents move in a fixed order. The first agent to reach a food item collects it, and the next agent chooses based on the updated board.
 
@@ -36,7 +36,7 @@ We chose tabular Q-learning as the learning method. Agents move in a fixed order
 | `index.html` | Drawing the board, buttons, settings, learning display, and episode results |
 | `README.md` | Setup and run guide |
 | `report.md` | Presentation report explaining the project's concepts, method, and components |
-| `learning_memory_v3.json` | Learning data created when the application runs |
+| `learning_memory_v4.json` | Learning data created when the application runs |
 
 Python holds the actual game state. Drawing a circle for an agent in HTML does not move it: Python first changes the position, then HTML displays the new coordinates. This keeps the game rules in one place.
 
@@ -111,7 +111,7 @@ position = (2, 2)
 
 The first `food_pairs` cells hold green food, the next equal number hold red food, and the final three are agent starting positions. This prevents food and agents from overlapping at the start.
 
-Each agent's speed is set with `randint(1, 3)`. Speed stays fixed for the episode and is selected again in the next episode. The assignment does not specify how often speed should be selected, so we choose it at the start of each episode.
+Each agent's speed is set with `randint(1, 3)`. It determines how many consecutive decisions that agent gets each turn. Speed stays fixed for the episode and is selected again in the next episode. The assignment does not specify how often speed should be selected, so we choose it at the start of each episode.
 
 `random.Random(seed)` is a random number generator. The same seed and sequence of operations can reproduce the same selections, which is useful for testing and investigating problems.
 
@@ -141,7 +141,7 @@ We use it for two purposes in the project:
 1. To identify the nearest other agent if the episode uses the Manhattan metric.
 2. To choose an agent's target food and summarize competition for that target.
 
-This function does not plan a route. It calculates horizontal and vertical distance between two points. Because speed can be 2 or 3, an agent stops at food, and other agents collect food, this value is not an exact estimate of the time needed to finish.
+This distance counts the horizontal and vertical cells between two points. The number of full turns to reach a target also depends on the agent's speed and the moves chosen by all three agents.
 
 ## 7. What is Euclidean distance, and why use it when diagonal moves are not allowed?
 
@@ -213,31 +213,23 @@ Neither x nor y changes at the same time, so diagonal movement is not possible. 
 
 The assignment uses the phrase “4 branches” in the same item where it lists five actions. The implementation uses the five actions explicitly listed. One action is selected for each move.
 
-## 10. Can a fast agent jump over food?
+## 10. How does a fast agent use its decisions?
 
-No. We do not teleport an agent with speed 3 forward by three cells at once. `Simulation.move()` breaks movement into **micro-steps**, or one-cell segments.
+A speed-3 agent gets up to three decisions in succession. Each decision uses a fresh observation and moves at most one cell. The agent can change direction after any decision.
 
-For example, suppose an agent is at `(4, 5)`, has speed 3, and moves right. If there is food at `(6, 5)`:
+Suppose a speed-3 agent starts at `(4, 5)` with green food at `(5, 4)` and elsewhere on the board. It can move right to `(5, 5)`, move up to `(5, 4)`, collect the food immediately, and use its third decision to move toward another item. Collecting the final green item ends the episode immediately.
 
-```text
-1. micro-step: (5, 5)
-2. micro-step: (6, 5) → food is collected and movement stops
-3. micro-step: the agent does not move
-```
-
-Moving off the board also stops movement. An agent moving left from `(0, 5)` cannot go to `(−1, 5)`.
-
-`project()` calculates one candidate move in advance using the same boundary and food rules. It does not change the actual board; it is used to determine whether a move in a given direction would hit red food. `move()` applies the next agent's move to the actual board and returns that agent's individual reward.
+Choosing **No Action** or attempting to step past a board edge leaves the position unchanged and uses one decision. `project()` predicts a candidate's one-cell destination, including the board boundary. `move()` applies the selected action, removes food from the destination, and returns the reward for that decision.
 
 ## 11. Sequential moves and food competition
 
-**What is it?** Sequential execution means that one agent's move is completed before another agent begins its decision and movement. The order is fixed for every turn: **agent 1 → agent 2 → agent 3**.
+**What is it?** Sequential execution means each agent uses all of its decisions before the next agent starts. The order is **agent 1 → agent 2 → agent 3** on every full turn.
 
 **What does it do?** The effect of each move is applied to the board immediately. It is clear who collected each food item, and the next agent does not decide based on food that is no longer there.
 
-**How is it used in this project?** `Simulation.step()` executes only the next agent's move. If an agent reaches food, the item is removed from its set immediately. The agent that collected it receives +1 for green or −1 for red. Green food is checked after every move; if the episode continues, the next agent receives an observation of the updated board.
+**How is it used in this project?** `Simulation.step()` executes one decision for the active agent. If it reaches food, the item is removed immediately and that agent receives +1 for green or −1 for red. The next decision uses the updated board. That decision belongs to the same agent if it has any left, or to the next agent once the allowance is spent.
 
-For example, suppose agents 1 and 2 could both reach the same green item. If agent 1 collects it during its move, the item is no longer in agent 2's observation. Agent 2 chooses an action based on the remaining food. If agent 1 collected the last green item, the episode ends without agents 2 and 3 moving.
+For example, suppose agents 1 and 2 could both reach the same green item. If agent 1 collects it, agent 2 chooses based on the remaining food. If agent 1 collects the last green item, the episode ends before any remaining decisions.
 
 Multiple agents may occupy the same cell; agents do not block one another. The fixed order can give an advantage to the agent that moves first when several agents can reach the same food. This is a limitation of the execution model.
 
@@ -271,19 +263,20 @@ We rank the two nearest green items by Manhattan distance. If the visible oppone
 |---|---|---|
 | Agent number | 1, 2, or 3 | Keeps the learning tables separate |
 | `sx,sy` | Horizontal and vertical direction to the target: −1, 0, +1 | Summarizes the directions in which to approach the target |
-| `v` | Agent speed | The same move can have a different result at a different speed |
+| `v` | Agent speed | Gives the total number of decisions on each of the agent's turns |
+| `m` | Decisions remaining in the agent's current turn, including the upcoming choice | Distinguishes acting again immediately from letting opponents act next |
 | `r` | Bit mask of red-food risks in the four movement directions | Distinguishes nearby hazards |
 | `g` | Bit mask of directions that collect green in this move | Distinguishes moves that give an immediate reward |
-| `p` | Bit mask of directions that reduce Manhattan distance to the target | Accounts for the real effects of speed, board edges, and stopping at food |
+| `p` | Bit mask of directions that reduce Manhattan distance to the target | Accounts for the result of one step in each direction, including board edges |
 | `c` | Is the visible opponent at least as close to the selected target as we are? | Records competition even when the agent has switched targets or has only one option |
 
 Example key:
 
 ```text
-1|1,-1|v2|r4|g0|p9|c1
+1|1,-1|v2|m1|r4|g0|p9|c1
 ```
 
-This is agent 1, with speed 2. The target is to the upper right, and the visible opponent is at least as close to it as agent 1. Moving left encounters red (`r4`). No green can be collected in one move (`g0`). Up and right move closer to the target (`p9 = 1 + 8`).
+This is agent 1, with speed 2 and one decision left in its turn. The target is to the upper right, and the visible opponent is at least as close to it as agent 1. Moving left encounters red (`r4`). No green can be collected in one move (`g0`). Up and right move closer to the target (`p9 = 1 + 8`).
 
 ### How do we calculate direction signs?
 
@@ -304,7 +297,7 @@ We store four separate yes/no values in one number:
 | Left | 4 |
 | Right | 8 |
 
-If left and right are risky, `r = 4 + 8 = 12`. `1 << action` produces the number for the corresponding action. All three masks use the same encoding. `project()` accounts for the agent's speed, board edges, and stopping at the first food item in each direction. For example, if speed is 1 and green food is one cell to the right, the result is `g8` and `p8`. If green food is two cells to the right, the result is `g0` and `p8`.
+If left and right are risky, `r = 4 + 8 = 12`. `1 << action` produces the number for the corresponding action. All three masks use the same encoding. For example, with a single green item one cell to the right, the result is `g8` and `p8`. If it is two cells to the right, the result is `g0` and `p8`. In either case, this decision can move one cell regardless of the agent's speed.
 
 We use the episode's distance metric to identify the visible opponent. The target selection and `c` use Manhattan distance for both agents. The opponent's speed is unknown, so this comparison measures distance only.
 
@@ -316,7 +309,7 @@ Different boards can still produce the same key. For example, with speed 1, targ
 
 ```json
 {
-  "1|1,-1|v2|r4|g0|p9|c1": [0.05, 0.0, 0.0, 0.05, 0.0]
+  "1|1,-1|v2|m1|r4|g0|p9|c1": [0.05, 0.0, 0.0, 0.05, 0.0]
 }
 ```
 
@@ -326,7 +319,7 @@ The `visits` list for the same key stores how many times each action actually re
 
 ```json
 {
-  "1|1,-1|v2|r4|g0|p9|c1": [3, 0, 1, 7, 0]
+  "1|1,-1|v2|m1|r4|g0|p9|c1": [3, 0, 1, 7, 0]
 }
 ```
 
@@ -390,7 +383,7 @@ Q_new(s,a) = Q_old(s,a) + α × δ
 | `s` | State before the move | State key |
 | `a` | The move taken | One of five actions |
 | `r` | Reward from this move | +1, −1, or 0 |
-| `s′` | The same agent's state at its next decision | Observation after the other agents have moved |
+| `s′` | The same agent's state at its next decision | The updated board and the number of decisions left at that point |
 | `max Q(s′,a′)` | Best estimated future in the new state | Highest of the five Q values |
 | `α` | How much weight should new information get? | 0.20 |
 | `γ` | How much should future reward matter? | 0.90 |
@@ -403,9 +396,9 @@ It is the learning rate. A value of 0.20 means the old estimate moves 20% of the
 
 It sets the weight of future rewards. The agent values not only rewards next to it, but also rewards expected on later moves. For example, if the best Q value in the new state is 0.4, its contribution to the target is `0.9 × 0.4 = 0.36`.
 
-### Why is the next observation taken on the agent's own turn?
+### When does the agent observe its next state?
 
-Suppose agent 1 moves toward a green item and receives reward 0. If agent 2 collects that item in between, the food is gone by the time agent 1 makes its next decision. We update agent 1's earlier move using the highest Q value calculated from the board it sees on its next turn. The record contains the earlier move's state key, action, and individual reward. Agent 2 alone receives +1 for the green item it collected.
+If the agent has decisions remaining, its next state uses the board immediately after its own move. If it just finished its turn, its next decision comes after the other agents have acted. For example, agent 1 may move toward a green item on its last decision, and agent 2 may collect it before agent 1 acts again. Agent 1 updates its earlier choice from the board it now sees. Agent 2 receives +1 for the item it collected.
 
 If the five Q values in the current state are `[0.1, 0.4, −0.2, 0.2, −0.05]`, the future estimate is 0.4. With reward 0 and old Q of 0.1, the target is 0.36, the temporal difference is 0.26, and the new Q is `0.1 + 0.2 × 0.26 = 0.152`. This update uses 0.4 even if the agent chooses a different action on its next move because of exploration. Q-learning is **off-policy** because its target uses the best estimated action, independently of the exploratory policy being followed.
 
@@ -441,7 +434,7 @@ Target = 1
 New Q  = 0.1 + 0.2 × (1 − 0.1) = 0.28
 ```
 
-The episode ends when the last green is collected or when 4,000 full turns have passed. Pending moves from agents whose turns have not come around again are also updated using their own immediate rewards. The future Q value is zero for all of these updates. For example, if another agent collected the last green and a pending move's reward was 0, that move's target is also zero.
+The episode ends when the last green is collected or when 4,000 full turns have passed. Every pending move is updated using its own immediate reward and a future Q value of zero. For example, if another agent collected the last green and a pending move's reward was 0, that move's target is also zero.
 
 ### The code
 
@@ -472,31 +465,29 @@ Because the full board and other agents' decisions do not fit in the state key, 
 
 ## 18. Move, turn, and episode flow
 
-A **move** is one agent choosing an action and receiving its result. A **turn** is all three agents taking one move in order. An **episode** is the experience from the starting board until the green food is gone or 4,000 turns have passed.
+A **decision** is one agent choosing an action and receiving its result. A **turn** covers all three agents using their consecutive decisions in order. An **episode** starts with a fresh board and ends when the green food runs out or 4,000 full turns pass.
 
-This distinction allows us to show every agent move separately and end an episode as soon as the final food is collected. `Simulation.step()` executes one move:
+`Simulation.step()` executes one decision. The interface can show each step separately.
 
-1. Prepare an observation and state values from the current board for the agent whose turn it is.
+1. Prepare an observation and state values for the active agent, including its remaining decisions.
 2. If that agent has a pending previous move, update it using the Q values from this observation.
-3. The agent selects a new action using its Q values and ε. `move()` returns its individual reward, and the move is held for learning.
-4. End the episode if no green food remains, or if agent 3's move completes 4,000 turns. Update pending moves with future Q set to zero.
-5. If the episode continues, advance to the next agent. If it ended, add the result to history and start a new board with agent 1.
+3. The agent selects a new action using its Q values and ε. `move()` applies the action and returns the individual reward. The decision uses one slot and is held for learning.
+4. End the episode if no green food remains, or if agent 3's final decision completes 4,000 full turns. Update every pending move with a future Q value of zero, save the result, and start a new board with agent 1.
+5. If the episode continues, the same agent acts while it has decisions remaining. When its allowance is spent, the next agent takes over.
 
-The observations and decisions for all three agents are not prepared together at the beginning of a turn. Agent 2 sees the board after agent 1 moved; agent 3 sees it after both earlier agents moved.
+Each decision prepares a fresh observation. Agent 2 sees the board after agent 1 has used all its decisions. Agent 3 sees the board after both earlier agents have done so.
 
 During an episode, `step_count` counts completed full turns. The result's `steps` field also counts the final partial turn in which the last green was collected. For example, an episode that ends on agent 2's move in its first turn is recorded as taking 1 turn.
 
-### Follow one move from start to finish
+### Follow two decisions by the same agent
 
-Suppose agent 1 is at `(4, 5)`, has speed 2, and the final green is at `(6, 5)`. Assume it chooses to move right; an exploratory action could choose something else.
+Suppose agent 1 is at `(4, 5)`, has speed 2, and the final green is at `(5, 4)`. It can reach the food by choosing right and then up.
 
-- Moving right approaches the target and collects green. If this is a new state, right's initial Q value is 0.05.
-- The agent moves first to `(5, 5)` and then to `(6, 5)`.
-- The green item is removed; only agent 1 receives +1.
-- No green remains, so the episode ends.
-- Future Q is set to zero. If the initial value was 0.05, the new Q is `0.05 + 0.2 × (1 − 0.05) = 0.24`.
-- Agents 2 and 3 do not move this turn. If they have pending moves from the previous turn, those Q values are also updated.
-- The episode result is added to memory history, and a new board is created.
+- On the first decision, agent 1 moves right to `(5, 5)` and receives 0.
+- With one decision left, it observes the new board and updates the previous right move using the Q values for this state.
+- It chooses up, reaches `(5, 4)`, receives +1, and ends the episode.
+- The terminal update for up uses a future Q value of zero. If up started at 0.05, its new Q value is `0.05 + 0.2 × (1 − 0.05) = 0.24`.
+- The episode result is added to history and the next board starts with agent 1.
 
 Starting a new episode does not reset the Q table. **The board changes; learned experience remains.**
 
@@ -529,7 +520,7 @@ Current Q values and visit counts are enough to continue learning. Saving all po
 
 ### How do we prevent a partial file write?
 
-We first write `learning_memory_v3.json.tmp`, then replace the main file:
+The application writes `learning_memory_v4.json.tmp` before replacing the main file.
 
 ```python
 temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -542,7 +533,7 @@ Data is saved at the end of an episode, when paused, when the new episode button
 
 `LearningMemory.load()` reads the file if it exists; otherwise, it starts with empty memory. During loading, history records that are not from sequential runs are filtered out, and the cleaned data is saved. If the file is corrupted or its version is unsupported, loading raises an error instead of silently resetting learning.
 
-Q values for the new target selection and initialization are kept in `learning_memory_v3.json`. When this file is absent, training starts with an empty Q table and episode history. The board and pending moves belong to runtime memory. When the application restarts or the user manually starts a new episode, those moves are discarded and a new board is created with the saved Q values.
+The expanded state key includes the remaining decisions and is stored in `learning_memory_v4.json`. When this file is absent, training begins with an empty Q table and episode history. Earlier fixed-direction runs used `learning_memory_v3.json`. When the application restarts or the user manually starts a new episode, the simulation creates a fresh board using the saved Q values and clears pending decisions.
 
 ### How to interpret the seed correctly
 
@@ -560,7 +551,7 @@ An **API** is a set of addresses and data rules that HTML can use:
 |---|---|---|
 | `/` | GET | Returns the HTML page |
 | `/api/state` | GET | Returns the current board and statistics |
-| `/api/tick` | POST | If running, executes 1–20 agent moves while preserving their order |
+| `/api/tick` | POST | If running, executes 1–20 single-cell decisions in order |
 | `/api/control` | POST | Starts, pauses, or applies settings and creates a new episode |
 | `/api/memory` | GET | Returns current Q memory, visits, and history as JSON |
 
@@ -600,7 +591,7 @@ Temporarily disables buttons while a control request is running, then enables th
 
 ### `render()`
 
-Converts scores and board state from the server into text and a table. It displays completed turns, the next agent, and old and new Q values for moves updated in the latest step.
+Converts scores and board state from the server into text and a table. It displays completed turns, the next agent and its step number, and the old and new Q values for the latest update.
 
 The training history is rebuilt when a result is added. Each row contains parameters and the individual reward and speed for all three agents. The **Ending turn** column immediately beside the episode number shows the result's `steps` field; this includes the final partial turn. Total score is the sum of all agents' rewards.
 
@@ -621,9 +612,9 @@ const y = (agent.y + 0.5) * cell;
 
 ### Training speed and agent speed are different
 
-The browser attempts to refresh about every 100 milliseconds. The slider controls how many agent moves run in one request. Its default is 1, so each agent move can be observed separately. If the value is increased from 1 to 20, moves are still processed in order within the same request, but only the final state is drawn. The green-food check after every move is preserved. A new request is not queued if the previous one is still running.
+The browser attempts to refresh about every 100 milliseconds. The slider controls the number of single-cell decisions per request. At 1, the browser shows each decision. At higher values up to 20, it shows the board after the last decision in the batch. The simulation checks for remaining green food after every decision. The browser waits for the current request to finish before sending another.
 
-Agent speed is how many cells it can move in a single move: 1, 2, or 3. The slider does not change it. Actual training speed depends on computation time and the browser timer; moves are not guaranteed to happen at a fixed rate per second. If the browser tab is closed, no new tick is sent, so the simulation does not progress with this design.
+Agent speed is the number of consecutive decisions it gets each turn. The slider only changes how often those decisions are drawn. Training speed depends on computation time and the browser timer. Closing the browser tab stops requests to advance the simulation.
 
 ## 22. How do we evaluate learning performance?
 
@@ -646,11 +637,11 @@ If there are at least 20 completed episodes with the same food count and sequent
 
 Random placement, speeds, and the decreasing exploration rate also affect results. The history shows progress over a run under those conditions.
 
-In one run of the current policy with 40 items of each color and a starting seed of 42, average net reward rose from 29.8 in the first 10 episodes to 36.6 in episodes 51–60. Average red items collected fell from 10.2 to 3.4, and all 40 green items were collected in every episode of both groups.
+### Historical results with fixed-direction moves
 
-### Earlier controlled trial
+In one run with the former fixed-direction movement, 40 items of each color, and a starting seed of 42, average net reward rose from 29.8 in the first 10 episodes to 36.6 in episodes 51–60. Average red items collected fell from 10.2 to 3.4, and all 40 green items were collected in every episode of both groups.
 
-This trial used the previous target rule and stronger starting Q values. We trained on boards with 40 food items of each color. Training episode seeds were 0–59 and test-board seeds were 100–111. Each policy was evaluated from the same starting boards with fixed Q values and 5% exploration. The untrained policy used the previous green bonus and red penalty in its initial Q values.
+A separate controlled trial also used fixed-direction movement, plus an earlier target rule and stronger starting Q values. We trained on boards with 40 food items of each color. Training episode seeds were 0–59 and test-board seeds were 100–111. Each policy was evaluated from the same starting boards with fixed Q values and 5% exploration. The untrained policy used the previous green bonus and red penalty in its initial Q values.
 
 | Prior training episodes | Average green | Average red | Average net reward | Average turns | Boards where all green was collected |
 |---:|---:|---:|---:|---:|---:|
@@ -658,7 +649,7 @@ This trial used the previous target rule and stronger starting Q values. We trai
 | 20 | 39.67 | 2.75 | 36.92 | 650.00 | 11/12 |
 | 60 | 40.00 | 1.67 | 38.33 | 678.00 | 12/12 |
 
-In this test, 60 episodes of training increased average net reward by 4 points and collected all green food on all 12 boards. The 20-episode policy took less time on average and collected more red food. These results apply to the previous policy, this food density, and these 12 boards.
+In this test, 60 episodes of training increased average net reward by 4 points and collected all green food on all 12 boards. The 20-episode policy took less time on average and collected more red food. These results apply to the earlier movement and learning setup, this food density, and these 12 boards.
 
 ## 23. Limitations and design decisions
 
@@ -668,7 +659,7 @@ In this test, 60 episodes of training increased average net reward by 4 points a
 - The state table does not include the entire board; we accept some information loss to keep memory small.
 - Euclidean distance is used only to measure the nearest opponent; diagonal movement is never allowed.
 - The 4,000-turn limit is an implementation decision that prevents an episode from continuing forever; it is not specified by the assignment.
-- An agent stops early at food or at the board edge. Red food is not a wall; it can be collected and gives a −1 reward.
+- A decision moves at most one cell. Attempting to cross a board edge uses a decision and leaves the agent in place. Red food is collected on contact and gives a −1 reward.
 - Agents are allowed to occupy the same cell. The assignment only specifies the outcome of food competition.
 - The fixed 1 → 2 → 3 order can give the agent that moves first an advantage when several agents can reach the same food.
 - Memory persists, but the exact board state is not saved. The application creates a new board when restarted.
@@ -686,12 +677,13 @@ HTML button / timer
     → HTTP request
     → app.py validation
     → Simulation.step()
-    → next agent: observation → update Q for its previous move
-    → new action → move → individual reward → hold move for learning
+    → active agent observes the board → update Q for its previous move
+    → one action → individual reward → save decision for the next Q update
     → check whether green food is gone / turn-limit check
+    → continue with this agent if it has decisions left, otherwise advance
     → if episode ended, update pending moves, save history and JSON
     → HTTP response
     → update HTML text and redraw the board
 ```
 
-During the demo, follow one move by agent 1 and then the board changes made by agents 2 and 3. When agent 1's turn comes around again, the Q panel shows the reward for its previous move and the future Q value calculated from its new observation. When the final green is collected, you can see pending moves completed with a future Q value of zero.
+During the demo, watch a speed-2 or speed-3 agent make consecutive decisions. The Q panel shows the previous decision's reward and the future Q value calculated from the new observation. After the last decision of its turn, the agent uses its next observation after the other agents have acted. When the final green is collected, pending moves are updated with a future Q value of zero.
