@@ -34,6 +34,8 @@ The browser opens automatically. If it does not, visit the `http://127.0.0.1:...
 
 Agents take turns in the order **1 → 2 → 3**. Each agent decides based on the current board, including changes made by earlier moves. Green food is checked after every move. If the last green item is collected, the episode result is saved before the next agent moves, and a new episode starts with agent 1. The next turn begins after all three agents have moved. If green food remains, the episode ends after 4,000 full turns. The turn count in the history includes the final partial turn in which the green food ran out.
 
+An agent targets the second-nearest green item if its visible opponent is closer to the nearest one. In a new Q state, moves that approach the selected target start at 0.05, and all other actions start at zero. The agent learns which moves lead to green and red food from their rewards.
+
 To shut down the application completely, press `Ctrl+C` in the terminal. Closing only the browser does not stop the server.
 
 ## Optional startup settings
@@ -48,9 +50,9 @@ To shut down the application completely, press `Ctrl+C` in the terminal. Closing
 
 Each agent updates the Q value for its previous move when its turn comes around again, using the observation at that time. When an episode ends, pending moves use a future Q value of zero.
 
-The application saves Q values, visit counts, and completed episode results to `learning_memory_v2.json`. It saves at the end of an episode, when paused, when a new episode starts, and when you exit with `Ctrl+C`. On the next launch, the application resumes learning from this file and creates a new board. Pending Q updates are discarded when the board is reset.
+The application saves Q values, visit counts, and completed episode results to `learning_memory_v3.json`. It saves at the end of an episode, when paused, when a new episode starts, and when you exit with `Ctrl+C`. On the next launch, the application resumes learning from this file and creates a new board. Pending Q updates are discarded when the board is reset.
 
-New state keys use a separate training history. The previous `learning_memory.json` file is kept locally. The new file starts with an empty memory on its first run. To start paused with 40 items of each color:
+The new target selection and initial Q values use a fresh memory file. When this file is absent, training starts with an empty Q table and episode history. To start paused with 40 items of each color:
 
 ```powershell
 \.venv\Scripts\python.exe app.py --food-pairs 40 --paused

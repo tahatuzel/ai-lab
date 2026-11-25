@@ -7,6 +7,7 @@ import math
 import random
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from heapq import nsmallest
 from pathlib import Path
 
 BOARD_SIZE = 50
@@ -149,9 +150,12 @@ class Simulation:
         return position, position in observation.red_foods
 
     def state_values(self, agent: Agent, observation: Observation) -> tuple[str, list[float]]:
-        target = min(observation.green_foods,
-                     key=lambda point: (manhattan(observation.position, point), point),
-                     default=observation.position)
+        targets = nsmallest(2, observation.green_foods,
+                            key=lambda point: (manhattan(observation.position, point), point))
+        target = targets[0] if targets else observation.position
+        if (len(targets) == 2
+                and manhattan(observation.nearest_agent, target) < manhattan(observation.position, target)):
+            target = targets[1]
         dx, dy = target[0] - observation.position[0], target[1] - observation.position[1]
         sx, sy = (dx > 0) - (dx < 0), (dy > 0) - (dy < 0)
         distance = abs(dx) + abs(dy)
@@ -168,15 +172,8 @@ class Simulation:
         competition = int(manhattan(observation.nearest_agent, target) <= distance)
         key = (f"{agent.agent_id}|{sx},{sy}|v{agent.speed}|r{red_mask}"
                f"|g{green_mask}|p{progress_mask}|c{competition}")
-        # A small initial preference uses visible food; experience replaces these values.
-        initial = []
-        for action in range(4):
-            bit = 1 << action
-            value = 0.1 if progress_mask & bit else -0.1
-            value += 0.4 if green_mask & bit else 0.0
-            value -= 0.5 if red_mask & bit else 0.0
-            initial.append(value)
-        initial.append(-0.05)
+        # Favor progress slightly. Food outcomes are learned from rewards.
+        initial = [0.05 if progress_mask & (1 << action) else 0.0 for action in range(len(ACTIONS))]
         return key, self.memory.values(key, initial)
 
     def choose_action(self, values: list[float]) -> int:

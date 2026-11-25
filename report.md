@@ -36,7 +36,7 @@ We chose tabular Q-learning as the learning method. Agents move in a fixed order
 | `index.html` | Drawing the board, buttons, settings, learning display, and episode results |
 | `README.md` | Setup and run guide |
 | `report.md` | Presentation report explaining the project's concepts, method, and components |
-| `learning_memory_v2.json` | Learning data created when the application runs |
+| `learning_memory_v3.json` | Learning data created when the application runs |
 
 Python holds the actual game state. Drawing a circle for an agent in HTML does not move it: Python first changes the position, then HTML displays the new coordinates. This keeps the game rules in one place.
 
@@ -265,7 +265,7 @@ For example, an agent that collects 12 green and 3 red items has a score of `12 
 
 Creating a separate learning-table entry for every possible board arrangement would require a lot of memory. `Simulation.state_values()` creates a smaller state key.
 
-First, we find the nearest green target using Manhattan distance. Coordinate order breaks distance ties. The key then includes:
+We rank the two nearest green items by Manhattan distance. If the visible opponent is strictly closer to the first item, the agent selects the second. With one green item left, it remains the target. Coordinate order breaks ties between food items. The key then describes the selected target and includes:
 
 | Part | Meaning | Why it is needed |
 |---|---|---|
@@ -275,7 +275,7 @@ First, we find the nearest green target using Manhattan distance. Coordinate ord
 | `r` | Bit mask of red-food risks in the four movement directions | Distinguishes nearby hazards |
 | `g` | Bit mask of directions that collect green in this move | Distinguishes moves that give an immediate reward |
 | `p` | Bit mask of directions that reduce Manhattan distance to the target | Accounts for the real effects of speed, board edges, and stopping at food |
-| `c` | Is the visible opponent at least as close to the target as we are? | Includes competition in the learned state |
+| `c` | Is the visible opponent at least as close to the selected target as we are? | Records competition even when the agent has switched targets or has only one option |
 
 Example key:
 
@@ -306,7 +306,7 @@ We store four separate yes/no values in one number:
 
 If left and right are risky, `r = 4 + 8 = 12`. `1 << action` produces the number for the corresponding action. All three masks use the same encoding. `project()` accounts for the agent's speed, board edges, and stopping at the first food item in each direction. For example, if speed is 1 and green food is one cell to the right, the result is `g8` and `p8`. If green food is two cells to the right, the result is `g0` and `p8`.
 
-For `c`, we compare the opponent's Manhattan distance to the target with our own. We do not estimate the opponent's actual arrival time because its speed is unknown. The opponent is selected using the metric chosen for that episode, but we use Manhattan distance again when summarizing target competition.
+We use the episode's distance metric to identify the visible opponent. The target selection and `c` use Manhattan distance for both agents. The opponent's speed is unknown, so this comparison measures distance only.
 
 Different boards can still produce the same key. For example, with speed 1, targets two and ten cells to the right produce the same state if all other features are equal. The moves of opponents that the agent cannot see can also change the next board.
 
@@ -316,11 +316,11 @@ Different boards can still produce the same key. For example, with speed 1, targ
 
 ```json
 {
-  "1|1,-1|v2|r4|g0|p9|c1": [0.1, -0.1, -0.6, 0.1, -0.05]
+  "1|1,-1|v2|r4|g0|p9|c1": [0.05, 0.0, 0.0, 0.05, 0.0]
 }
 ```
 
-The list order is always `Up, Down, Left, Right, No Action`. In this example, up and right have the highest initial estimates; left starts low because of the red-food risk.
+The list order is always `Up, Down, Left, Right, No Action`. Up and right start at 0.05 because both approach the target. The red-food risk appears in the state key and affects the Q value through the reward when an agent tries that action.
 
 The `visits` list for the same key stores how many times each action actually received a learning update:
 
@@ -338,9 +338,9 @@ A row may also be created when looking up the next state's values. Therefore, so
 
 ## 15. How does an agent move when it initially knows nothing?
 
-For a new state, initial Q values are calculated from the food the agent can currently see. A direction that moves toward the target starts at +0.1; other directions start at −0.1. Add 0.4 if a move collects green. Subtract 0.5 if it reaches red. Waiting starts at −0.05.
+For a new state, a move that reduces the distance to the selected target starts at 0.05. All other actions, including waiting, start at zero. This small preference gives the agent a direction before it has experience.
 
-For example, if moving right approaches the target and collects green, its initial value is `0.1 + 0.4 = 0.5`. If moving right approaches the target but red is in the way, the initial value is `0.1 − 0.5 = −0.4`.
+An action that approaches the target starts at 0.05 whether it collects green, collects red, or reaches an empty cell. The `g` and `r` masks let learning assign different values to those situations as the agent receives rewards.
 
 `LearningMemory.values()` saves these values the first time a state is seen. Later visits use the updated Q values. The environment's reward is +1, −1, or 0 according to the food collected during the move. Initial preferences guide behavior only when no experience has been recorded for that state.
 
@@ -490,11 +490,11 @@ During an episode, `step_count` counts completed full turns. The result's `steps
 
 Suppose agent 1 is at `(4, 5)`, has speed 2, and the final green is at `(6, 5)`. Assume it chooses to move right; an exploratory action could choose something else.
 
-- Moving right approaches the target and collects green. If this is a new state, right's initial Q value is +0.5.
+- Moving right approaches the target and collects green. If this is a new state, right's initial Q value is 0.05.
 - The agent moves first to `(5, 5)` and then to `(6, 5)`.
 - The green item is removed; only agent 1 receives +1.
 - No green remains, so the episode ends.
-- Future Q is set to zero. If the initial value was 0.5, the new Q is `0.5 + 0.2 × (1 − 0.5) = 0.6`.
+- Future Q is set to zero. If the initial value was 0.05, the new Q is `0.05 + 0.2 × (1 − 0.05) = 0.24`.
 - Agents 2 and 3 do not move this turn. If they have pending moves from the previous turn, those Q values are also updated.
 - The episode result is added to memory history, and a new board is created.
 
@@ -529,7 +529,7 @@ Current Q values and visit counts are enough to continue learning. Saving all po
 
 ### How do we prevent a partial file write?
 
-We first write `learning_memory_v2.json.tmp`, then replace the main file:
+We first write `learning_memory_v3.json.tmp`, then replace the main file:
 
 ```python
 temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -542,7 +542,7 @@ Data is saved at the end of an episode, when paused, when the new episode button
 
 `LearningMemory.load()` reads the file if it exists; otherwise, it starts with empty memory. During loading, history records that are not from sequential runs are filtered out, and the cleaned data is saved. If the file is corrupted or its version is unsupported, loading raises an error instead of silently resetting learning.
 
-Q values for the new state keys are kept in `learning_memory_v2.json`. The first run creates new memory, while the old `learning_memory.json` is kept locally. The board and pending moves belong to runtime memory. When the application restarts or the user manually starts a new episode, those moves are discarded and a new board is created with the saved Q values.
+Q values for the new target selection and initialization are kept in `learning_memory_v3.json`. When this file is absent, training starts with an empty Q table and episode history. The board and pending moves belong to runtime memory. When the application restarts or the user manually starts a new episode, those moves are discarded and a new board is created with the saved Q values.
 
 ### How to interpret the seed correctly
 
@@ -644,11 +644,13 @@ Agent speed is how many cells it can move in a single move: 1, 2, or 3. The slid
 
 If there are at least 20 completed episodes with the same food count and sequential order, the average total reward of the first and last 10 episodes is compared. Episodes with different food counts are not included in the same comparison. The history contains only sequential-run results.
 
-Random placement, speeds, and the decreasing exploration rate also affect results. Therefore, it would be incorrect to attribute the entire increase in average reward to Q-learning alone. A stronger experiment would repeat runs under the same starting conditions and include a control policy with learning disabled. The project does not guarantee continuous improvement on every new board or an optimal policy.
+Random placement, speeds, and the decreasing exploration rate also affect results. The history shows progress over a run under those conditions.
 
-### Controlled trial
+In one run of the current policy with 40 items of each color and a starting seed of 42, average net reward rose from 29.8 in the first 10 episodes to 36.6 in episodes 51–60. Average red items collected fell from 10.2 to 3.4, and all 40 green items were collected in every episode of both groups.
 
-We trained on boards with 40 food items of each color and new state keys. Training episode seeds were 0–59; test-board seeds were 100–111. We recreated the same starting conditions for each test board. During testing, learning updates were disabled and exploration was fixed at 5% for each policy. The untrained policy used only the initial preferences from episode 15.
+### Earlier controlled trial
+
+This trial used the previous target rule and stronger starting Q values. We trained on boards with 40 food items of each color. Training episode seeds were 0–59 and test-board seeds were 100–111. Each policy was evaluated from the same starting boards with fixed Q values and 5% exploration. The untrained policy used the previous green bonus and red penalty in its initial Q values.
 
 | Prior training episodes | Average green | Average red | Average net reward | Average turns | Boards where all green was collected |
 |---:|---:|---:|---:|---:|---:|
@@ -656,7 +658,7 @@ We trained on boards with 40 food items of each color and new state keys. Traini
 | 20 | 39.67 | 2.75 | 36.92 | 650.00 | 11/12 |
 | 60 | 40.00 | 1.67 | 38.33 | 678.00 | 12/12 |
 
-In this test, 60 episodes of training increased average net reward by 4 points and collected all green food on all 12 boards. The 20-episode policy took less time on average and collected more red food. These results apply to this food density and these 12 boards. The trial does not measure the effects of the two changes separately.
+In this test, 60 episodes of training increased average net reward by 4 points and collected all green food on all 12 boards. The 20-episode policy took less time on average and collected more red food. These results apply to the previous policy, this food density, and these 12 boards.
 
 ## 23. Limitations and design decisions
 
