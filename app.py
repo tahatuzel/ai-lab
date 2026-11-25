@@ -12,7 +12,7 @@ from pathlib import Path
 from simulation import ALPHA, GAMMA, ACTIONS, BOARD_SIZE, MAX_FOOD_PAIRS, LearningMemory, Simulation
 
 PROJECT_DIR = Path(__file__).resolve().parent
-MEMORY_PATH = PROJECT_DIR / "learning_memory_v4.json"
+MEMORY_PATH = PROJECT_DIR / "learning_memory_v5.json"
 HTML_PATH = PROJECT_DIR / "index.html"
 
 

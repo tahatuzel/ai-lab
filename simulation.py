@@ -23,6 +23,9 @@ def manhattan(a: Position, b: Position) -> int:
     return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
 
+DISTANCES = {"Manhattan": manhattan, "Euclidean": math.dist}
+
+
 @dataclass
 class Agent:
     agent_id: int
@@ -121,7 +124,7 @@ class Simulation:
         self.agent_steps_taken = 0
         self.pending: dict[int, tuple[str, int, int]] = {}
         self.last_updates: list[dict] = []
-        self.metric = self.rng.choice(("Manhattan", "Euclidean"))
+        self.metric = self.rng.choice(tuple(DISTANCES))
         cells = self.rng.sample(range(BOARD_SIZE ** 2), self.food_pairs * 2 + 3)
         positions = [(cell % BOARD_SIZE, cell // BOARD_SIZE) for cell in cells]
         self.green_foods = set(positions[:self.food_pairs])
@@ -130,7 +133,7 @@ class Simulation:
                        for index, point in enumerate(positions[-3:])]
 
     def observation_for(self, agent: Agent) -> Observation:
-        distance = manhattan if self.metric == "Manhattan" else math.dist
+        distance = DISTANCES[self.metric]
         nearest = min((other for other in self.agents if other.agent_id != agent.agent_id),
                       key=lambda other: (distance(agent.position, other.position), other.agent_id))
         return Observation(agent.position, agent.speed, frozenset(self.green_foods),
@@ -147,15 +150,16 @@ class Simulation:
         return destination, destination in observation.red_foods
 
     def state_values(self, agent: Agent, observation: Observation) -> tuple[str, list[float]]:
+        distance = DISTANCES[self.metric]
         targets = nsmallest(2, observation.green_foods,
-                            key=lambda point: (manhattan(observation.position, point), point))
+                            key=lambda point: (distance(observation.position, point), point))
         target = targets[0] if targets else observation.position
-        if (len(targets) == 2
-                and manhattan(observation.nearest_agent, target) < manhattan(observation.position, target)):
+        target_distance = distance(observation.position, target)
+        if len(targets) == 2 and distance(observation.nearest_agent, target) < target_distance:
             target = targets[1]
+            target_distance = distance(observation.position, target)
         dx, dy = target[0] - observation.position[0], target[1] - observation.position[1]
         sx, sy = (dx > 0) - (dx < 0), (dy > 0) - (dy < 0)
-        distance = abs(dx) + abs(dy)
         red_mask = green_mask = progress_mask = 0
         for action in range(4):
             destination, hits_red = self.project(observation, action)
@@ -164,14 +168,13 @@ class Simulation:
                 red_mask |= bit
             if destination in observation.green_foods:
                 green_mask |= bit
-            if manhattan(destination, target) < distance:
+            if distance(destination, target) < target_distance:
                 progress_mask |= bit
-        competition = int(manhattan(observation.nearest_agent, target) <= distance)
         steps_left = agent.speed
         if agent is self.agents[self.next_agent_index]:
             steps_left -= self.agent_steps_taken
         key = (f"{agent.agent_id}|{sx},{sy}|v{agent.speed}|m{steps_left}|r{red_mask}"
-               f"|g{green_mask}|p{progress_mask}|c{competition}")
+               f"|g{green_mask}|p{progress_mask}|d{self.metric}")
         # Favor progress slightly. Food outcomes are learned from rewards.
         initial = [0.05 if progress_mask & (1 << action) else 0.0 for action in range(len(ACTIONS))]
         return key, self.memory.values(key, initial)
@@ -210,10 +213,13 @@ class Simulation:
         if self.agent_steps_taken == agent.speed:
             self.agent_steps_taken = 0
             self.next_agent_index = (self.next_agent_index + 1) % len(self.agents)
-            if self.next_agent_index == 0:
-                self.step_count += 1
+        turn_finished = self.next_agent_index == 0 and self.agent_steps_taken == 0
+        if turn_finished:
+            self.step_count += 1
         terminal = not self.green_foods or self.step_count >= self.MAX_EPISODE_STEPS
         if not terminal:
+            if turn_finished:
+                self.metric = self.rng.choice(tuple(DISTANCES))
             return None
         for agent_id in tuple(self.pending):
             self._learn_pending(agent_id)

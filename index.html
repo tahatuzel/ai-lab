@@ -84,7 +84,7 @@
       <p>Tamamlanan sıralı bölümler JSON'a kaydedilir. En yeni sonuç üsttedir. “Bitiş turu”, bölümün kaç turda sona erdiğini gösterir; son kısmi tur da sayılır. Bölüm, yeşiller bitince veya 4.000 tur tamamlanınca sona erer. α öğrenme oranı, γ gelecek ödül ağırlığı, ε keşif oranıdır.</p>
       <p id="learning-progress"></p>
       <table>
-        <thead><tr><th>Bölüm / zaman</th><th>Bitiş turu</th><th>Her renk</th><th>Başlangıç seed</th><th>Uzaklık</th><th>α</th><th>γ</th><th>ε</th><th>Yeşil</th><th>Kırmızı</th><th>Toplam ödül</th><th>Ajan 1 ödül / hız</th><th>Ajan 2 ödül / hız</th><th>Ajan 3 ödül / hız</th></tr></thead>
+        <thead><tr><th>Bölüm / zaman</th><th>Bitiş turu</th><th>Her renk</th><th>Başlangıç seed</th><th>Son turun ölçütü</th><th>α</th><th>γ</th><th>ε</th><th>Yeşil</th><th>Kırmızı</th><th>Toplam ödül</th><th>Ajan 1 ödül / hız</th><th>Ajan 2 ödül / hız</th><th>Ajan 3 ödül / hız</th></tr></thead>
         <tbody id="history"></tbody>
       </table>
     </section>
@@ -177,7 +177,7 @@
         "Bölüm: " + data.episode + " · tamamlanan tur: " + data.step,
         "Sıradaki hamle: tur " + (data.step + 1) + " · Ajan " + data.next_agent + " · adım " +
           data.next_agent_step + "/" + data.agents[data.next_agent - 1].speed,
-        "En yakın rakip: " + (data.metric === "Euclidean" ? "Öklid" : "Manhattan"),
+        "Turun uzaklık ölçütü: " + (data.metric === "Euclidean" ? "Öklid" : "Manhattan"),
         "Uygulanan yiyecek sayısı: " + data.food_pairs + " / renk",
         "Kalan yeşil: " + data.green_foods.length + " · kırmızı: " + data.red_foods.length, ""
       ];

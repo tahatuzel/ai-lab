@@ -1,107 +1,105 @@
-# BIL353 — Multi-Agent Food Collection: Project Report
+# BIL353 — Çok Ajanlı Yiyecek Toplama Proje Raporu
 
-This report explains the rules, learning method, and software components of a simulation in which three agents compete to collect food. Each component is covered by three questions: **What is it? What does it do? How is it used in this project?** Short code examples and numerical calculations support the explanations. Setup and run commands are in `README.md`.
+Bu rapor, üç ajanın yiyecek toplamak için yarıştığı simülasyonun kurallarını, öğrenme yöntemini ve yazılım bileşenlerini açıklar. Her bileşenin ne olduğu, ne işe yaradığı ve projede nasıl kullanıldığı kısa kod parçaları ve sayısal örneklerle anlatılır. Kurulum ve çalıştırma komutları `README.md` dosyasında yer alır.
 
-## 1. Project purpose and scope
+## 1. Projenin amacı ve kapsamı
 
-Imagine a game board with three players, green food to collect, and red food to avoid. We call each player an **agent**. An agent is a piece of software that receives information about its surroundings and chooses a move.
+Tahtada üç oyuncu, toplanacak yeşil yiyecekler ve kaçınılacak kırmızı yiyecekler var. Her oyuncuya **ajan** diyoruz. Ajan, çevresine ilişkin bilgi alıp bir eylem seçen yazılım bileşenidir.
 
-Our task is not to control the players by hand. We make each agent choose a move, receive a reward for its result, and use that experience to change later choices. This is called **reinforcement learning**: instead of giving the agent a list of correct moves in advance, we use rewards to communicate the outcomes of its behavior.
+Her ajan kendi eylemini seçer, sonucuna göre ödül alır ve bu deneyimi sonraki seçimlerinde kullanır. Bu yönteme **pekiştirmeli öğrenme** denir. Ajan, davranışlarının sonuçlarını aldığı ödüllerden öğrenir.
 
-The project uses one learning method: tabular **Q-learning**. We do not train a neural network or a language model. The core environment runs in Python; an HTML page displays and controls it.
+Projede tablo tabanlı **Q-öğrenmesi** kullanılır. Simülasyonu Python yürütür. HTML arayüzü tahtayı gösterir ve simülasyonun kontrol edilmesini sağlar.
 
-### Where are the assignment requirements met?
+### Ödev gereksinimlerinin uygulamadaki karşılığı
 
-| Requirement | Implementation | Code location |
+| Gereksinim | Uygulamadaki karşılığı | Kod konumu |
 |---|---|---|
-| 50 × 50 board | Coordinates range from 0 to 49; 2,500 cells in total | `simulation.py`: `BOARD_SIZE` |
-| Equal numbers of green and red items, placed randomly, with a total of at most 30% of cells | At most 375 of each color; random cells are selected without replacement | `MAX_FOOD_PAIRS`, `Simulation.new_episode()` |
-| Three agents | Three `Agent` instances on different starting cells | `Simulation.new_episode()` |
-| Only the nearest opponent's position | The observation contains one opponent coordinate | `Simulation.observation_for()` |
-| Random choice of Manhattan or Euclidean distance | One metric is selected at the start of each episode | `new_episode()`, `observation_for()` |
-| Food is observable | Coordinates for all green and red items are included in the observation | `Observation` |
-| Random speed of 1–3 cells | The speed gives each agent 1–3 consecutive single-cell decisions per turn | `new_episode()`, `step()` |
-| Up, down, left, right, and no action | Five discrete choices | `ACTIONS`, `DELTAS`, `move()` |
-| Green +1, red −1; independent rewards | Only the collecting agent receives the food reward; only the agent that made the move gets its Q update | `Agent.reward`, `move()`, `LearningMemory.learn()` |
-| Fixed move order | Agents 1 → 2 → 3 each use their decisions in order. Green food is checked after every decision | `Simulation.step()` |
+| 50 × 50 tahta | Koordinatlar 0 ile 49 arasındadır. Tahtada 2.500 hücre bulunur | `simulation.py`, `BOARD_SIZE` |
+| Yeşil ve kırmızı yiyecekler eşit sayıda ve rastgele yerleştirilir. Toplam yiyecek sayısı hücrelerin en fazla %30'u kadardır | Her renkten en fazla 375 yiyecek yerleştirilir. Başlangıç hücreleri tekrarsız örneklemeyle seçilir | `MAX_FOOD_PAIRS`, `Simulation.new_episode()` |
+| Üç ajan | Üç `Agent` nesnesi farklı hücrelerde başlar | `Simulation.new_episode()` |
+| Yalnızca en yakın rakibin konumu gözlemlenir | Gözlemde bir rakibin koordinatı yer alır | `Simulation.observation_for()` |
+| Manhattan veya Öklid uzaklığı rastgele seçilir | Her turun başında bir ölçüt seçilir ve tur boyunca bütün ajanlar bu ölçütü kullanır | `new_episode()`, `step()`, `observation_for()`, `state_values()` |
+| Yiyecekler gözlemlenebilir | Gözlem, bütün yeşil ve kırmızı yiyeceklerin koordinatlarını içerir | `Observation` |
+| Ajan hızı 1–3 hücre arasında rastgele seçilir | Hız, ajanın bir turda kaç ardışık adım atabileceğini belirler. Her adımda en fazla bir hücre ilerler | `new_episode()`, `step()` |
+| Yukarı, aşağı, sol, sağ ve bekleme | Beş ayrık eylem vardır | `ACTIONS`, `DELTAS`, `move()` |
+| Yeşil için +1, kırmızı için −1 ve bağımsız ödüller | Yiyeceği toplayan ajan ödülü alır. Adımın Q güncellemesi o ajanın değerlerine uygulanır | `Agent.reward`, `move()`, `LearningMemory.learn()` |
+| İki ajan aynı yeşil yiyecek için yarıştığında sola hareket edene öncelik verilmesi | Uygulama farkı. Simülasyonda ajanlar 1 → 2 → 3 sırasıyla hareket eder ve hücreye ilk ulaşan ajan yiyeceği alır | `Simulation.step()` |
 
-We chose tabular Q-learning as the learning method. Agents move in a fixed order. The first agent to reach a food item collects it, and the next agent chooses based on the updated board.
+Her adım tahtaya hemen uygulanır. Sıradaki adımın kararı güncel tahta üzerinden verilir. Son yeşil yiyecek toplandığında bölüm sona erer.
 
-## 2. Software components and responsibilities
+## 2. Yazılım bileşenleri ve görevleri
 
-| File | Responsibility |
+| Dosya | Görevi |
 |---|---|
-| `simulation.py` | Agents, board, observations, movement, rewards, learning, and JSON memory |
-| `app.py` | Local web server and communication between the HTML page and simulation |
-| `index.html` | Drawing the board, buttons, settings, learning display, and episode results |
-| `README.md` | Setup and run guide |
-| `report.md` | Presentation report explaining the project's concepts, method, and components |
-| `learning_memory_v4.json` | Learning data created when the application runs |
+| `simulation.py` | Ajanlar, tahta, gözlemler, hareket, ödüller, öğrenme ve JSON belleği |
+| `app.py` | Yerel web sunucusu ve HTML sayfasıyla simülasyon arasındaki iletişim |
+| `index.html` | Tahta çizimi, düğmeler, ayarlar, öğrenme göstergeleri ve bölüm sonuçları |
+| `README.md` | Kurulum ve çalıştırma kılavuzu |
+| `report.md` | Projenin kavramlarını, yöntemini ve bileşenlerini açıklayan rapor |
+| `learning_memory_v5.json` | Uygulama çalışırken oluşturulan öğrenme verileri |
 
-Python holds the actual game state. Drawing a circle for an agent in HTML does not move it: Python first changes the position, then HTML displays the new coordinates. This keeps the game rules in one place.
+Simülasyonun durumu Python tarafında tutulur. Bir ajan hareket ettiğinde önce Python konumunu günceller, ardından HTML arayüzü ajanı yeni koordinatlarında çizer. Böylece tahta kuralları Python tarafında tek yerde tanımlanır.
 
-## 3. A short glossary for reading the code
+## 3. Kodu okumak için kısa sözlük
 
-- **Variable:** A name given to a value. `BOARD_SIZE = 50` stores the board size under a name.
-- **Function:** A group of code that performs a task. `manhattan(a, b)` takes two positions and returns a distance.
-- **Loop:** Repeats the same task. We loop through the agents to choose their moves.
-- **Class / object:** Groups the data and behavior for a concept. We create three separate agent objects from the `Agent` class.
-- **List:** An ordered collection. A state's five Q values are stored in a list in action order.
-- **Tuple:** Used here for a fixed coordinate pair such as `(x, y)`.
-- **Set:** Holds unique items. Food coordinates are stored in sets so we can quickly check whether a cell contains food.
-- **Dictionary:** Looks up a value by its key. We use a state key to access its Q-value list.
-- **`dataclass`:** Defines fields such as an agent's position and speed with little code.
-- **Type annotation:** An expression such as `Position = tuple[int, int]` describes the expected data format; by itself, it does not validate user input.
+- **Değişken** bir değeri adlandırır. `BOARD_SIZE = 50` ifadesi tahta boyutunu bir ad altında saklar.
+- **Fonksiyon** belirli bir işi yapar. `manhattan(a, b)` iki konum alır ve aralarındaki uzaklığı döndürür.
+- **Döngü** bir işlemi tekrar eder. Ajanların eylemlerini seçerken ajanlar üzerinde sırayla ilerlenir.
+- **Sınıf ve nesne** bir kavramın verilerini ve davranışlarını bir araya getirir. `Agent` sınıfından üç ayrı ajan nesnesi oluşturulur.
+- **Liste** öğeleri sırayla saklar. Bir durumun beş Q değeri, eylem sırasına göre bir listeye yazılır.
+- **Demet** bu projede `(x, y)` gibi sabit koordinat çiftlerini temsil eder.
+- **Küme** benzersiz öğeleri saklar. Yiyecek koordinatları kümelerde tutulduğu için bir hücrede yiyecek olup olmadığı hızlıca belirlenebilir.
+- **Sözlük** bir anahtar üzerinden ilgili değeri bulur. Durum anahtarıyla o durumun Q değerleri listesine erişilir.
+- **`dataclass`** ajanın konumu ve hızı gibi alanların kısa biçimde tanımlanmasını sağlar.
+- **Tür açıklaması** beklenen veri türünü belirtir. `Position = tuple[int, int]` iki tam sayıdan oluşan bir demet beklendiğini ifade eder. Kullanıcı girdisini doğrulamak için ayrıca kod gerekir.
 
-`json`, `math`, `random`, `dataclasses`, `datetime`, and `pathlib` in `simulation.py`, as well as the HTTP server in `app.py`, come from Python's standard library. No extra packages are installed.
+`simulation.py` dosyasındaki `json`, `math`, `random`, `dataclasses`, `datetime` ve `pathlib` modülleri ile `app.py` dosyasındaki HTTP sunucusu Python standart kütüphanesinden gelir. Proje standart kütüphane ile çalışır.
 
-## 4. What are the board, cells, and coordinates?
+## 4. Tahta, hücreler ve koordinatlar
 
-The board has 50 columns and 50 rows. We represent a cell as `(x, y)`:
+Tahta 50 sütun ve 50 satırdan oluşur. Her hücre `(x, y)` çiftiyle gösterilir.
 
-- `x` increases from left to right.
-- `y` increases from top to bottom.
-- The top-left cell is `(0, 0)` and the bottom-right cell is `(49, 49)`.
+- `x` soldan sağa doğru artar.
+- `y` yukarıdan aşağıya doğru artar.
+- Sol üst hücre `(0, 0)`, sağ alt hücre `(49, 49)` konumundadır.
 
-For example, an agent at `(10, 8)` moves to `(11, 8)` when it goes right and `(10, 7)` when it goes up. On screen coordinates, moving up decreases `y`.
-
-In code:
+Örneğin `(10, 8)` konumundaki bir ajan sağa giderse `(11, 8)`, yukarı giderse `(10, 7)` konumuna ulaşır. Ekran koordinatlarında yukarı gitmek `y` değerini azaltır.
 
 ```python
 BOARD_SIZE = 50
 Position = tuple[int, int]
 ```
 
-We do not create a large matrix of 2,500 cell objects. Agent positions and sets of food coordinates are enough. If a coordinate is not in either set, that cell has no food.
+Tahtayı temsil etmek için ajan konumlarını ve yiyecek koordinatı kümelerini saklamak yeterlidir. Bir hücre iki yiyecek kümesinde de yer almıyorsa o hücrede yiyecek yoktur.
 
-## 5. How did we create a random starting board?
+## 5. Rastgele başlangıç tahtasının oluşturulması
 
-### First, the 30% limit
+### Yiyecek sayısında %30 sınırı
 
 ```text
-50 × 50 = 2,500 cells
-2,500 × 0.30 = 750 food cells
-750 / 2 = at most 375 of each color
+50 × 50 = 2.500 hücre
+2.500 × 0,30 = 750 yiyecek hücresi
+750 / 2 = her renkten en fazla 375 yiyecek
 ```
 
-That is why `MAX_FOOD_PAIRS` is:
+Kodda bu üst sınır `MAX_FOOD_PAIRS` ile hesaplanır.
 
 ```python
 MAX_FOOD_PAIRS = BOARD_SIZE * BOARD_SIZE * 30 // 100 // 2
 ```
 
-If the user enters 125, we place 125 green and 125 red items, for 250 food items in total. `food_pairs` specifies how many items there are of each color.
+Kullanıcı 125 girerse 125 yeşil ve 125 kırmızı olmak üzere toplam 250 yiyecek yerleştirilir. `food_pairs`, her bir rengin yiyecek sayısını belirtir.
 
-### Choosing unique cells
+### Ayrı hücrelerin seçilmesi
 
-`Simulation.new_episode()` does the following:
+`Simulation.new_episode()` yiyecekler ve ajanlar için tekrarsız bir hücre listesi seçer.
 
 ```python
 cells = self.rng.sample(range(BOARD_SIZE ** 2), self.food_pairs * 2 + 3)
 positions = [(cell % BOARD_SIZE, cell // BOARD_SIZE) for cell in cells]
 ```
 
-`range(2500)` numbers the cells from 0 to 2499. `sample` does not select the same number twice. We convert a number to coordinates using division and remainder. For example, cell number 102 becomes:
+`range(2500)` hücreleri 0 ile 2499 arasında numaralandırır. `sample`, her numarayı en fazla bir kez seçer. Hücre numarası, bölüm ve kalan işlemleriyle koordinata dönüştürülür. Örneğin 102 numaralı hücrenin koordinatı şöyle bulunur.
 
 ```text
 x = 102 % 50 = 2
@@ -109,141 +107,129 @@ y = 102 // 50 = 2
 position = (2, 2)
 ```
 
-The first `food_pairs` cells hold green food, the next equal number hold red food, and the final three are agent starting positions. This prevents food and agents from overlapping at the start.
+İlk `food_pairs` hücre yeşil yiyeceklere, sonraki aynı sayıdaki hücre kırmızı yiyeceklere ayrılır. Son üç hücre ajanların başlangıç konumlarıdır. Böylece başlangıçta yiyecekler ve ajanlar ayrı hücrelere yerleşir.
 
-Each agent's speed is set with `randint(1, 3)`. It determines how many consecutive decisions that agent gets each turn. Speed stays fixed for the episode and is selected again in the next episode. The assignment does not specify how often speed should be selected, so we choose it at the start of each episode.
+Her ajanın hızı `randint(1, 3)` ile belirlenir. Hız, ajanın bir turda art arda kaç adım atabileceğini gösterir. Bölüm boyunca sabit kalır ve sonraki bölümün başında yeniden seçilir.
 
-`random.Random(seed)` is a random number generator. The same seed and sequence of operations can reproduce the same selections, which is useful for testing and investigating problems.
+`random.Random(seed)` bir rastgele sayı üreteci oluşturur. Aynı rastgelelik tohumu (`seed`) ve aynı işlem sırası, seçimleri yeniden üretmeyi sağlar. Bu özellik test ve hata incelemelerinde kullanılır.
 
-## 6. What is Manhattan distance?
+## 6. Manhattan uzaklığı
 
-Manhattan distance is a distance metric. Imagine a city with a grid of streets and count the cells traveled horizontally and vertically:
+Manhattan uzaklığı, iki nokta arasındaki yatay ve dikey farkların mutlak değerlerini toplar. Izgara üzerindeki bir tahta için bu değer, iki nokta arasındaki yatay ve dikey hücre adımlarını sayar.
 
 ```text
 d = |x₁ − x₂| + |y₁ − y₂|
 ```
 
-The vertical bars mean absolute value: remove the sign of the result. Between `(2, 3)` and `(5, 7)`:
+Dikey çizgiler mutlak değeri gösterir. Örneğin `(2, 3)` ile `(5, 7)` arasındaki Manhattan uzaklığı 7'dir.
 
 ```text
 |2 − 5| + |3 − 7| = 3 + 4 = 7
 ```
 
-The implementation in `simulation.py` is:
+`simulation.py` dosyasındaki hesaplama şöyledir.
 
 ```python
 def manhattan(a, b):
     return abs(a[0] - b[0]) + abs(a[1] - b[1])
 ```
 
-We use it for two purposes in the project:
+Turun ölçütü Manhattan ise simülasyon bu hesabı en yakın rakibi belirlemek, yeşil yiyecekleri sıralamak, rakiple hedefe olan uzaklıkları karşılaştırmak ve bir adımın hedefe yaklaştırıp yaklaştırmadığını belirlemek için kullanır. Turun ölçütü Öklid olduğunda aynı hesaplamalar Öklid uzaklığıyla yapılır.
 
-1. To identify the nearest other agent if the episode uses the Manhattan metric.
-2. To choose an agent's target food and summarize competition for that target.
+Bir hedefe kaç tam turda ulaşılacağı ajanın hızına ve üç ajanın seçtiği eylemlere de bağlıdır.
 
-This distance counts the horizontal and vertical cells between two points. The number of full turns to reach a target also depends on the agent's speed and the moves chosen by all three agents.
+## 7. Öklid uzaklığı ve turun ölçütünün seçilmesi
 
-## 7. What is Euclidean distance, and why use it when diagonal moves are not allowed?
-
-Euclidean distance is the straight-line length between two points:
+Öklid uzaklığı, iki nokta arasındaki düz çizginin uzunluğudur.
 
 ```text
 d = √((x₁ − x₂)² + (y₁ − y₂)²)
 ```
 
-For the same example, the result is `√(3² + 4²) = 5`. Instead of writing the formula ourselves, Python uses the standard `math.dist` function.
+Önceki örnekte sonuç `√(3² + 4²) = 5` olur. Python'daki `math.dist` fonksiyonu bu hesabı yapar.
 
-**Measuring distance and moving are different tasks.** When Euclidean distance is selected, agents still cannot move diagonally. Only the choice of which opponent counts as nearest changes. The final assignment text we followed asks for a random choice between the two metrics, so we kept both.
+Ödevde en yakın rakibin belirlenmesi için iki uzaklık ölçütünden birinin rastgele seçilmesi istenir. Simülasyon turun ölçütünü rakip ve hedefle ilgili bütün uzaklık hesaplarında kullanır. Ajanlar adımlarını dört ana yönden veya bekleme eyleminden seçer.
 
-For example, let the main agent be at `(0, 0)` and the other agents at `(3, 3)` and `(0, 5)`:
+Örneğin ajan `(0, 0)`, rakipleri ise `(3, 3)` ve `(0, 5)` konumlarında olsun.
 
-| Opponent | Manhattan | Euclidean |
+| Rakibin konumu | Manhattan uzaklığı | Öklid uzaklığı |
 |---|---:|---:|
-| `(3, 3)` | 6 | about 4.24 |
+| `(3, 3)` | 6 | Yaklaşık 4,24 |
 | `(0, 5)` | 5 | 5 |
 
-Manhattan distance considers the second opponent closer; Euclidean distance considers the first closer.
-
-The two code sections are:
+Manhattan ölçütüyle `(0, 5)` konumundaki rakip, Öklid ölçütüyle `(3, 3)` konumundaki rakip daha yakındır.
 
 ```python
-# new_episode()
-self.metric = self.rng.choice(("Manhattan", "Euclidean"))
-
-# observation_for()
-distance = manhattan if self.metric == "Manhattan" else math.dist
+# observation_for() ve state_values()
+distance = DISTANCES[self.metric]
 ```
 
-The metric is selected once at the start of an episode. If two opponents are equally close, the lower agent number breaks the tie. The assignment does not specify how to break ties, so we chose a consistent rule.
+`DISTANCES`, `Manhattan` adını `manhattan` fonksiyonuna, `Euclidean` adını `math.dist` fonksiyonuna eşler. İlk ölçüt yeni bölüm açılırken seçilir. Tam tur bittiğinde ve bölüm sürüyorsa bir sonraki turun ölçütü yeniden rastgele seçilir. Bir tur içinde bütün ajanlar ve adımlar aynı ölçütü kullanır. İki rakip seçili ölçüte göre aynı uzaklıktaysa ajan numarası küçük olan rakip gözleme alınır.
 
-## 8. What does an agent know and not know?
+## 8. Ajanın gözlem bilgileri
 
-An **observation** is the information an agent is allowed to use when making a decision. `Observation` contains:
+**Gözlem**, ajanın karar verirken kullanabildiği bilgileri bir araya getirir. `Observation` şu alanları içerir.
 
 ```python
-position       # Its own position
-speed          # Its own speed
-green_foods    # Positions of all green food
-red_foods      # Positions of all red food
-nearest_agent  # The position of one opponent
+position       # Ajanın kendi konumu
+speed          # Ajanın kendi hızı
+green_foods    # Bütün yeşil yiyeceklerin konumları
+red_foods      # Bütün kırmızı yiyeceklerin konumları
+nearest_agent  # En yakın rakibin konumu
 ```
 
-The other opponents' positions and both opponents' speeds are not in this object. `frozenset` carries the food coordinates as an immutable view; an agent cannot change the board's food while preparing a decision.
+Gözleme rakiplerden yalnızca en yakınının konumu eklenir. Ajanın hız bilgisi kendi hızıyla sınırlıdır. Yiyecek koordinatları değiştirilemez `frozenset` kümeleri olarak aktarılır. Ajan, kararını hazırlarken simülasyonun yiyecek verilerini değiştiremez.
 
-The simulation engine must know all agents to manage movement and collisions. `observation_for()` narrows that broad information and sends only the permitted observation to the decision code. Showing all agents on screen does not mean that every agent receives all of their positions for decision-making.
+Simülasyon, tahtayı yönetmek ve arayüzde çizmek için üç ajanın da konumunu tutar. `observation_for()`, karar koduna yalnızca ilgili ajanın kullanabildiği bilgileri gönderir.
 
-## 9. How are the five actions represented in code?
+## 9. Beş eylemin kodda gösterimi
 
 ```python
 ACTIONS = ("Up", "Down", "Left", "Right", "No Action")
 DELTAS = ((0, -1), (0, 1), (-1, 0), (1, 0), (0, 0))
 ```
 
-Items at the same index correspond to each other:
+`ACTIONS` ve `DELTAS` dizilerindeki aynı indisler birbirine karşılık gelir.
 
-| Index | Action | Position change |
+| İndis | Eylem | Konum değişimi |
 |---:|---|---|
-| 0 | Up | `(0, -1)` |
-| 1 | Down | `(0, 1)` |
-| 2 | Left | `(-1, 0)` |
-| 3 | Right | `(1, 0)` |
-| 4 | No Action | `(0, 0)` |
+| 0 | Yukarı (`Up`) | `(0, -1)` |
+| 1 | Aşağı (`Down`) | `(0, 1)` |
+| 2 | Sol (`Left`) | `(-1, 0)` |
+| 3 | Sağ (`Right`) | `(1, 0)` |
+| 4 | Bekle (`No Action`) | `(0, 0)` |
 
-Neither x nor y changes at the same time, so diagonal movement is not possible. “No Action” is a choice; it is not an automatic waiting state.
+Yön eylemlerinde `x` ve `y` koordinatlarından yalnızca biri değişir. Bu nedenle hareket yatay veya düşeydir. Ajan yerinde kalmak için `No Action` eylemini seçer.
 
-The assignment uses the phrase “4 branches” in the same item where it lists five actions. The implementation uses the five actions explicitly listed. One action is selected for each move.
+Ödev metninde “4 branches” ifadesiyle birlikte beş eylem açıkça listelenir. Uygulama bu beş eylemi kullanır ve ajan her adımda bunlardan birini seçer.
 
-## 10. How does a fast agent use its decisions?
+## 10. Hızlı bir ajan adımlarını nasıl kullanır?
 
-A speed-3 agent gets up to three decisions in succession. Each decision uses a fresh observation and moves at most one cell. The agent can change direction after any decision.
+Hızı 3 olan ajan art arda en fazla üç adım yapar. Her adımda güncel tahtayı gözlemler, en fazla bir hücre ilerler ve yönü yeniden seçebilir.
 
-Suppose a speed-3 agent starts at `(4, 5)` with green food at `(5, 4)` and elsewhere on the board. It can move right to `(5, 5)`, move up to `(5, 4)`, collect the food immediately, and use its third decision to move toward another item. Collecting the final green item ends the episode immediately.
+Örneğin hızı 3 olan bir ajan `(4, 5)` konumunda başlasın. Tahtada `(5, 4)` konumunda ve başka hücrelerde yeşil yiyecek olsun. Ajan sağa giderek `(5, 5)` konumuna, ardından yukarı giderek `(5, 4)` konumuna ulaşabilir. Yiyeceği hemen toplar ve üçüncü adımında başka bir yiyeceğe yönelebilir. Son yeşil yiyecek toplandığında bölüm hemen biter.
 
-Choosing **No Action** or attempting to step past a board edge leaves the position unchanged and uses one decision. `project()` predicts a candidate's one-cell destination, including the board boundary. `move()` applies the selected action, removes food from the destination, and returns the reward for that decision.
+`No Action` eylemini seçmek veya tahta sınırının dışına doğru hareket etmeye çalışmak bir adım hakkı kullanır ve ajan bulunduğu hücrede kalır. `project()`, tahta sınırını hesaba katarak aday eylemin sonunda ajanın bulunacağı hücreyi belirler. `move()` seçilen eylemi uygular, ulaşılan hücredeki yiyeceği tahtadan kaldırır ve o adımın ödülünü döndürür.
 
-## 11. Sequential moves and food competition
+## 11. Sıralı adımlar ve yiyecek rekabeti
 
-**What is it?** Sequential execution means each agent uses all of its decisions before the next agent starts. The order is **agent 1 → agent 2 → agent 3** on every full turn.
+Her tam turda ajanlar **ajan 1 → ajan 2 → ajan 3** sırasıyla hareket eder. Bir sonraki ajan ancak sırası gelen ajan adım haklarını kullandığında hareket etmeye başlar.
 
-**What does it do?** The effect of each move is applied to the board immediately. It is clear who collected each food item, and the next agent does not decide based on food that is no longer there.
+`Simulation.step()`, sırası gelen ajanın bir adımını yürütür. Ajan bir yiyeceğe ulaşırsa yiyecek hemen tahtadan kaldırılır ve onu toplayan ajan yeşil için +1, kırmızı için −1 ödül alır. Sonraki adım güncel tahtaya göre seçilir. Ajanın hakkı varsa bir sonraki adım yine ona aittir. Hakları tükendiğinde sıra bir sonraki ajana geçer.
 
-**How is it used in this project?** `Simulation.step()` executes one decision for the active agent. If it reaches food, the item is removed immediately and that agent receives +1 for green or −1 for red. The next decision uses the updated board. That decision belongs to the same agent if it has any left, or to the next agent once the allowance is spent.
+Örneğin 1. ve 2. ajan aynı yeşil yiyeceğe ulaşabilecek konumda olsun. 1. ajan yiyeceği topladığında 2. ajan kalan yiyeceklere göre seçim yapar. Toplanan yiyecek son yeşil ise kalan adımlar uygulanmadan bölüm biter.
 
-For example, suppose agents 1 and 2 could both reach the same green item. If agent 1 collects it, agent 2 chooses based on the remaining food. If agent 1 collects the last green item, the episode ends before any remaining decisions.
+Birden fazla ajan aynı hücrede bulunabilir. Birkaç ajan aynı yiyeceğe erişebildiğinde sabit sıra, önce hareket eden ajana avantaj sağlayabilir.
 
-Multiple agents may occupy the same cell; agents do not block one another. The fixed order can give an advantage to the agent that moves first when several agents can reach the same food. This is a limitation of the execution model.
+## 12. Ödül, durum ve Q değeri
 
-## 12. The difference between reward, state, and Q value
+- **Ödül (`r`)** adımın sonucudur. Ajan yeşil topladığında +1, kırmızı topladığında −1, yiyecek toplamadığında 0 alır.
+- **Durum (`s`)** ajanın karar verirken karşılaştığı koşulları özetler. Örneğin hedef sağ üstte olabilir, ajanın hızı 2 olabilir ve solda kırmızı yiyecek riski bulunabilir.
+- **Q değeri (`Q(s,a)`)** ajan `s` durumunda `a` eylemini seçtiğinde elde etmeyi beklediği toplam indirgenmiş ödülün tahminidir.
 
-To understand learning, distinguish these three concepts:
+Puan, ajanın şimdiye kadar topladığı ödüllerle hesaplanır. Q değeri ise bir eylemin beklenen getirisini ifade eder. Örneğin ajanın puanı 7 iken belirli bir durumda sağa gitmenin Q değeri 0,35 olabilir.
 
-- **Reward `r`:** What just happened? Collecting green gives +1, collecting red gives −1, and collecting no food gives 0.
-- **State `s`:** What conditions did the agent face when it made a decision? For example, the target is in the upper right, the agent has speed 2, and there is a red-food risk to the left.
-- **Q value `Q(s,a)`:** How much future reward might result from choosing action `a` in state `s`? It is the agent's estimate.
-
-A Q value is not the actual score. An agent may have 7 points while the Q value of moving right in a particular state is 0.35. One is the reward it has collected in the past; the other is an estimate about the future.
-
-`Agent.reward` calculates the actual score:
+`Agent.reward` ajanın puanını hesaplar.
 
 ```python
 @property
@@ -251,97 +237,97 @@ def reward(self):
     return self.green - self.red
 ```
 
-For example, an agent that collects 12 green and 3 red items has a score of `12 − 3 = 9`. The interface summarizes the team score, but we do not give that total to every agent as its learning reward. Each agent learns from the food it collected.
+12 yeşil ve 3 kırmızı yiyecek toplayan ajanın puanı `12 − 3 = 9` olur. Arayüzde üç ajanın toplam puanı da gösterilir. Her ajan, yalnızca kendi topladığı yiyeceklerin ödülünden öğrenir.
 
-## 13. How did we summarize the state without encoding the whole board?
+## 13. Tahtanın durum anahtarıyla özetlenmesi
 
-Creating a separate learning-table entry for every possible board arrangement would require a lot of memory. `Simulation.state_values()` creates a smaller state key.
+Olası her tahta düzeni için Q tablosunda ayrı bir kayıt açmak çok fazla bellek gerektirir. `Simulation.state_values()` bunun yerine daha küçük bir durum anahtarı oluşturur.
 
-We rank the two nearest green items by Manhattan distance. If the visible opponent is strictly closer to the first item, the agent selects the second. With one green item left, it remains the target. Coordinate order breaks ties between food items. The key then describes the selected target and includes:
+Ajan, turun uzaklık ölçütüne göre en yakın iki yeşil yiyeceği sıralar. Gördüğü rakip aynı ölçüte göre birinci yiyeceğe kendisinden daha yakınsa ikinciyi hedefler. Tahtada tek yeşil yiyecek varsa hedef o yiyecektir. Ajanın iki yiyeceğe uzaklığı eşitse koordinat sırası belirleyici olur. Durum anahtarı seçilen hedefi ve turun ölçütünü içerir.
 
-| Part | Meaning | Why it is needed |
+| Parça | Anlamı | İşlevi |
 |---|---|---|
-| Agent number | 1, 2, or 3 | Keeps the learning tables separate |
-| `sx,sy` | Horizontal and vertical direction to the target: −1, 0, +1 | Summarizes the directions in which to approach the target |
-| `v` | Agent speed | Gives the total number of decisions on each of the agent's turns |
-| `m` | Decisions remaining in the agent's current turn, including the upcoming choice | Distinguishes acting again immediately from letting opponents act next |
-| `r` | Bit mask of red-food risks in the four movement directions | Distinguishes nearby hazards |
-| `g` | Bit mask of directions that collect green in this move | Distinguishes moves that give an immediate reward |
-| `p` | Bit mask of directions that reduce Manhattan distance to the target | Accounts for the result of one step in each direction, including board edges |
-| `c` | Is the visible opponent at least as close to the selected target as we are? | Records competition even when the agent has switched targets or has only one option |
+| Ajan numarası | 1, 2 veya 3 | Ajanların Q kayıtlarını birbirinden ayırır |
+| `sx,sy` | Hedefin yatay ve düşey yönü (`−1`, `0` veya `+1`) | Hedefe hangi yönde yaklaşılabileceğini özetler |
+| `v` | Ajanın hızı | Ajanın tur başına kaç adım hakkı olduğunu belirtir |
+| `m` | Yaklaşan adım dahil olmak üzere ajanın mevcut turunda kalan adım sayısı | Bir sonraki adımın aynı ajana mı, rakiplerden birine mi ait olacağını ayırt etmeye yarar |
+| `r` | Dört hareket yönündeki kırmızı yiyecek riskinin bit maskesi | Yakındaki tehlikeleri gösterir |
+| `g` | Bu adımda yeşil yiyecek toplanan yönlerin bit maskesi | Anında ödül getiren yönleri gösterir |
+| `p` | Turun ölçütüne göre hedefe uzaklığı azaltan yönlerin bit maskesi | Tahta sınırı dahil olmak üzere her yöndeki tek adımın sonucunu özetler |
+| `d` | Turun uzaklık ölçütü, `Manhattan` veya `Euclidean` | Farklı ölçütlerle oluşturulan Q durumlarını ayırır |
 
-Example key:
+Örnek durum anahtarı
 
 ```text
-1|1,-1|v2|m1|r4|g0|p9|c1
+1|1,-1|v2|m1|r4|g0|p9|dManhattan
 ```
 
-This is agent 1, with speed 2 and one decision left in its turn. The target is to the upper right, and the visible opponent is at least as close to it as agent 1. Moving left encounters red (`r4`). No green can be collected in one move (`g0`). Up and right move closer to the target (`p9 = 1 + 8`).
+Bu anahtar, hızı 2 olan 1. ajana aittir ve ajanın turunda bir adım hakkı kalmıştır. Hedef sağ üsttedir. Turun ölçütü Manhattan uzaklığıdır (`dManhattan`). Sola gidildiğinde kırmızı yiyeceğe ulaşılır (`r4`). Tek adımda yeşil yiyecek toplanamaz (`g0`). Yukarı ve sağ yönleri ajanı hedefe yaklaştırır (`p9 = 1 + 8`).
 
-### How do we calculate direction signs?
+### Yön işaretleri nasıl hesaplanır?
 
 ```python
 sx = (dx > 0) - (dx < 0)
 ```
 
-In Python, `True` behaves like `1` and `False` like `0`. If `dx` is positive, the result is `1 − 0 = 1`; if it is negative, the result is `0 − 1 = −1`; if it is zero, the result is `0 − 0 = 0`. We do the same for y.
+Python’da bu işlemde `True` değeri `1`, `False` değeri `0` olarak kullanılır. `dx` pozitifse `1 − 0 = 1`, negatifse `0 − 1 = −1`, sıfırsa `0 − 0 = 0` elde edilir. Aynı işlem `y` koordinatı için de uygulanır.
 
-### What is a bit mask?
+### Bit maskesi nasıl çalışır?
 
-We store four separate yes/no values in one number:
+Dört yöndeki evet/hayır bilgisi bir sayıda tutulur. Özelliğin geçerli olduğu yönlerin değerleri toplanır.
 
-| Direction | Number added if the property is true |
+| Yön | Özellik geçerliyse eklenen değer |
 |---|---:|
-| Up | 1 |
-| Down | 2 |
-| Left | 4 |
-| Right | 8 |
+| Yukarı | 1 |
+| Aşağı | 2 |
+| Sol | 4 |
+| Sağ | 8 |
 
-If left and right are risky, `r = 4 + 8 = 12`. `1 << action` produces the number for the corresponding action. All three masks use the same encoding. For example, with a single green item one cell to the right, the result is `g8` and `p8`. If it is two cells to the right, the result is `g0` and `p8`. In either case, this decision can move one cell regardless of the agent's speed.
+Sol ve sağ yönler riskliyse `r = 4 + 8 = 12` olur. `1 << action` ifadesi ilgili eylemin değerini üretir. Üç bit maskesi de aynı kodlamayı kullanır. Örneğin sağda bir hücre uzaklıkta tek bir yeşil yiyecek varsa `g8` ve `p8` elde edilir. Yiyecek sağda iki hücre uzaklıktaysa `g0` ve `p8` elde edilir. Her iki durumda da ajan, hızı kaç olursa olsun o adımda en fazla bir hücre ilerler.
 
-We use the episode's distance metric to identify the visible opponent. The target selection and `c` use Manhattan distance for both agents. The opponent's speed is unknown, so this comparison measures distance only.
+Rakip bilgisi, en yakın yeşil yiyeceğe olan uzaklıkları karşılaştırıp hedefi seçmek için kullanılır. Ajana rakibin hızı verilmez.
 
-Different boards can still produce the same key. For example, with speed 1, targets two and ten cells to the right produce the same state if all other features are equal. The moves of opponents that the agent cannot see can also change the next board.
+Farklı tahta düzenleri aynı anahtarı üretebilir. Örneğin hızı 1 olan bir ajan için iki hücre sağdaki hedef ile on hücre sağdaki hedef, diğer özellikler aynı kaldığında aynı durum anahtarını oluşturur. Ajanın göremediği rakibin adımları da tahtanın bir sonraki durumunu etkileyebilir.
 
-## 14. How is the Q table stored?
+## 14. Q tablosunun saklanması
 
-`LearningMemory.q_values` is a dictionary whose keys are states and whose values are five Q numbers:
-
-```json
-{
-  "1|1,-1|v2|m1|r4|g0|p9|c1": [0.05, 0.0, 0.0, 0.05, 0.0]
-}
-```
-
-The list order is always `Up, Down, Left, Right, No Action`. Up and right start at 0.05 because both approach the target. The red-food risk appears in the state key and affects the Q value through the reward when an agent tries that action.
-
-The `visits` list for the same key stores how many times each action actually received a learning update:
+`LearningMemory.q_values`, her durum anahtarını beş Q değerinden oluşan bir listeyle eşleştiren bir sözlüktür.
 
 ```json
 {
-  "1|1,-1|v2|m1|r4|g0|p9|c1": [3, 0, 1, 7, 0]
+  "1|1,-1|v2|m1|r4|g0|p9|dManhattan": [0.05, 0.0, 0.0, 0.05, 0.0]
 }
 ```
 
-This means that up was updated 3 times, left once, and right 7 times. This version does not use visit counts to change the learning rate; it stores them so we can inspect the learning process.
+Listenin sırası her zaman `Up`, `Down`, `Left`, `Right`, `No Action` biçimindedir. Örnekte yukarı ve sağa gitmek ajanı hedefe yaklaştırdığı için bu eylemlerin başlangıç değeri 0,05’tir. Kırmızı yiyecek riski durum anahtarında yer alır. Ajan ilgili eylemi denediğinde aldığı ödül Q değerine yansır.
 
-Because the agent number is part of the key, agent 1's reward does not change agent 2's row. The data is held in one physical dictionary, but the tables are logically separate.
+Aynı anahtara ait `visits` listesi her eylemin kaç kez güncellendiğini saklar.
 
-A row may also be created when looking up the next state's values. Therefore, some rows counted as “learned states” may not yet have had an action selected and updated. The actual number of learning updates is the sum of `visits`; the interface displays this as “Q updates.”
+```json
+{
+  "1|1,-1|v2|m1|r4|g0|p9|dManhattan": [3, 0, 1, 7, 0]
+}
+```
 
-## 15. How does an agent move when it initially knows nothing?
+Bu kayıtta yukarı 3, sol 1, sağ 7 kez güncellenmiştir. Ziyaret sayıları öğrenme sürecini incelemek için tutulur. Öğrenme oranı sabittir.
 
-For a new state, a move that reduces the distance to the selected target starts at 0.05. All other actions, including waiting, start at zero. This small preference gives the agent a direction before it has experience.
+Ajan numarası durum anahtarında yer aldığı için 1. ajanın ödülü yalnızca 1. ajana ait kaydı etkiler. Kayıtlar tek bir sözlükte, ajan numarasına göre ayrı tutulur.
 
-An action that approaches the target starts at 0.05 whether it collects green, collects red, or reaches an empty cell. The `g` and `r` masks let learning assign different values to those situations as the agent receives rewards.
+Bir sonraki durumun değerlerine bakılırken de yeni bir kayıt açılabilir. Dolayısıyla “Öğrenilen durum” sayısına, henüz eylem seçilmemiş ve güncelleme yapılmamış kayıtlar da dahildir. Arayüzdeki “Q güncellemesi” sayacı, `visits` listelerindeki tüm sayaçların toplamını gösterir.
 
-`LearningMemory.values()` saves these values the first time a state is seen. Later visits use the updated Q values. The environment's reward is +1, −1, or 0 according to the food collected during the move. Initial preferences guide behavior only when no experience has been recorded for that state.
+## 15. Yeni bir durumda başlangıç tercihleri
 
-## 16. How does the agent choose an action? ε-greedy
+Ajanı seçilen hedefe yaklaştıran eylemler 0,05 Q değeriyle başlar. Bekleme dahil diğer eylemlerin başlangıç değeri sıfırdır. Bu küçük fark, ajan henüz deneyim edinmemişken hedefe yaklaşmayı destekler.
 
-Always taking the move that currently looks best could prevent the agent from discovering whether another choice is better. We address this with some **exploration**.
+Hedefe yaklaştıran bir eylemin başlangıç değeri, eylem yeşil veya kırmızı yiyecekle ya da boş hücreyle sonuçlansa da 0,05’tir. `g` ve `r` maskeleri bu durumları birbirinden ayırır. Ajan ödül aldıkça söz konusu durumlara farklı Q değerleri atayabilir.
 
-`Simulation.choose_action()`:
+`LearningMemory.values()`, bir durum ilk kez görüldüğünde başlangıç değerlerini kaydeder. Daha sonraki karşılaşmalarda tablodaki güncel Q değerleri kullanılır. Ortam, adımda toplanan yiyeceğe göre +1, −1 veya 0 ödül verir.
+
+## 16. Eylem seçimi ve ε-açgözlü yöntem
+
+Ajan çoğu zaman en iyi görünen eylemi seçer. Zaman zaman **keşif** yaparak başka eylemleri de dener.
+
+`Simulation.choose_action()` eylemi şu şekilde seçer.
 
 ```python
 if self.rng.random() < self.memory.epsilon:
@@ -350,27 +336,27 @@ best = max(values)
 return self.rng.choice([i for i, value in enumerate(values) if value == best])
 ```
 
-- With probability `ε`, choose one of the five actions at random.
-- Otherwise, choose an action with the highest Q value.
-- If several actions share the highest value, choose randomly among them.
+- Ajan `ε` olasılıkla beş eylemden birini rastgele seçer.
+- Kalan olasılıkla en yüksek Q değerine sahip eylemi seçer.
+- En yüksek değeri birden fazla eylem paylaşıyorsa bu eylemler arasından rastgele seçim yapar.
 
-At the start, `ε = 0.20`, so exploration happens in about one decision out of five. This does not mean every fifth decision is random; a separate probability is applied at every decision.
+Başlangıçta `ε = 0.20` olduğu için ortalama her beş adımdan birinde keşif yapılır. Her adım için seçim olasılığı bağımsız olarak uygulanır.
 
-The exploration rate decreases with the number of completed episodes:
+Keşif oranı tamamlanan bölüm sayısıyla azalır.
 
 ```python
 max(0.05, 0.20 * 0.97 ** episodes)
 ```
 
-It is 0.20 in the first episode and about 0.147 after 10 episodes. It has a minimum of 0.05. This lets the agent use what it has learned more often without eliminating new behavior entirely.
+İlk bölümde oran 0,20’dir. On bölüm tamamlandığında yaklaşık 0,147 olur. Alt sınır 0,05’tir. Ajan zamanla öğrendiği eylemleri daha sık seçer ve keşif yapmayı da sürdürür.
 
-The three agents have separate Q values, but in this simplified version α, γ, and ε are shared by the program. Random exploration can lead to red food. Making mistakes is part of learning from negative rewards.
+Üç ajanın Q değerleri ayrı, α, γ ve ε değerleri ortaktır. Keşif sırasında kırmızı yiyeceğe ulaşan ajan, aldığı negatif ödülden öğrenir.
 
-## 17. Step-by-step Q-learning mathematics
+## 17. Q-öğrenmesinin matematiği
 
-`Q(s,a)` estimates the discounted total reward an agent expects to receive over its own moves if it takes action `a` in state `s`. If it can collect green two decisions later, that food contributes `γ² × 1` to today's estimate. With `γ = 0.90`, the value is 0.81. This lets the Q value account for a preparatory move that does not collect food immediately.
+`Q(s,a)`, ajanın `s` durumunda `a` eylemini seçtiğinde kendi adımları boyunca elde etmeyi beklediği toplam indirgenmiş ödülü tahmin eder. Ajan yeşil yiyeceği iki adım sonra toplarsa bu ödül bugünkü tahmine `γ² × 1` kadar katkı yapar. `γ = 0.90` olduğunda katkı 0,81’dir. Bu sayede yiyeceği hemen toplamasa da ajana avantaj sağlayan hazırlık adımları değerlendirmeye katılır.
 
-The update first calculates a target, then the temporal difference (`δ`):
+Güncelleme önce hedef değeri, ardından zamansal farkı (`δ`) hesaplar.
 
 ```text
 target = r + γ × max Q(s′,a′)
@@ -378,67 +364,67 @@ target = r + γ × max Q(s′,a′)
 Q_new(s,a) = Q_old(s,a) + α × δ
 ```
 
-| Symbol | Meaning | In this project |
+| Sembol | Anlamı | Bu projedeki karşılığı |
 |---|---|---|
-| `s` | State before the move | State key |
-| `a` | The move taken | One of five actions |
-| `r` | Reward from this move | +1, −1, or 0 |
-| `s′` | The same agent's state at its next decision | The updated board and the number of decisions left at that point |
-| `max Q(s′,a′)` | Best estimated future in the new state | Highest of the five Q values |
-| `α` | How much weight should new information get? | 0.20 |
-| `γ` | How much should future reward matter? | 0.90 |
+| `s` | Adım öncesindeki durum | Durum anahtarı |
+| `a` | Seçilen eylem | Beş eylemden biri |
+| `r` | Adımın ödülü | +1, −1 veya 0 |
+| `s′` | Aynı ajanın bir sonraki karar anındaki durumu | Güncel tahta ve o anda kalan adım sayısı |
+| `max Q(s′,a′)` | Yeni durumdan beklenen en yüksek getiri | Beş Q değerinin en büyüğü |
+| `α` | Öğrenme oranı | 0,20 |
+| `γ` | Gelecekteki ödüllerin ağırlığı | 0,90 |
 
-### What does α do?
+### α ne işe yarar?
 
-It is the learning rate. A value of 0.20 means the old estimate moves 20% of the way toward the new target. One experience does not erase the entire history.
+Öğrenme oranı α, eski Q tahmininin yeni hedefe ne kadar yaklaşacağını belirler. 0,20 değeri, eski tahmin ile hedef arasındaki farkın %20’sinin kapatılması anlamına gelir. Önceki deneyimlerin etkisi böylece korunur.
 
-### What does γ do?
+### γ ne işe yarar?
 
-It sets the weight of future rewards. The agent values not only rewards next to it, but also rewards expected on later moves. For example, if the best Q value in the new state is 0.4, its contribution to the target is `0.9 × 0.4 = 0.36`.
+γ, sonraki adımlardan beklenen ödüllerin ağırlığını belirler. Örneğin yeni durumdaki en iyi Q değeri 0,4 ise bunun hedefe katkısı `0.9 × 0.4 = 0.36` olur.
 
-### When does the agent observe its next state?
+### Ajan bir sonraki durumu ne zaman gözlemler?
 
-If the agent has decisions remaining, its next state uses the board immediately after its own move. If it just finished its turn, its next decision comes after the other agents have acted. For example, agent 1 may move toward a green item on its last decision, and agent 2 may collect it before agent 1 acts again. Agent 1 updates its earlier choice from the board it now sees. Agent 2 receives +1 for the item it collected.
+Ajanın adım hakkı kaldıysa bir sonraki durum, az önce uyguladığı eylemden sonraki tahtaya göre belirlenir. Ajan turunu bitirdiyse diğer ajanlar kendi adımlarını tamamlayınca yeniden karar verir. Örneğin 1. ajan son adımında yeşil bir yiyeceğe yaklaşabilir ve 2. ajan, 1. ajanın sırası yeniden gelmeden o yiyeceği toplayabilir. 1. ajan önceki adımını karşısındaki güncel tahtaya göre günceller. Yiyeceği toplayan 2. ajan +1 ödül alır.
 
-If the five Q values in the current state are `[0.1, 0.4, −0.2, 0.2, −0.05]`, the future estimate is 0.4. With reward 0 and old Q of 0.1, the target is 0.36, the temporal difference is 0.26, and the new Q is `0.1 + 0.2 × 0.26 = 0.152`. This update uses 0.4 even if the agent chooses a different action on its next move because of exploration. Q-learning is **off-policy** because its target uses the best estimated action, independently of the exploratory policy being followed.
+Bir sonraki karar anındaki Q değerleri `[0.1, 0.4, −0.2, 0.2, −0.05]` olsun. Gelecek getiri tahmini 0,4’tür. Ödül 0 ve eski Q 0,1 ise hedef 0,36, zamansal fark 0,26 ve yeni Q değeri `0.1 + 0.2 × 0.26 = 0.152` olur. Ajan keşif sırasında başka bir eylem seçse bile güncelleme 0,4’ü kullanır. Q-öğrenmesi bu nedenle **politika dışı (off-policy)** bir yöntemdir. Hedef hesabı tahmini en yüksek eylem değerini kullanır ve keşif sırasında fiilen seçilen eylemden bağımsızdır.
 
-### Numerical example: green food collected
+### Sayısal örnek — yeşil yiyecek
 
-Suppose old Q = 0.1, reward = +1, and the best Q in the new state = 0.4:
-
-```text
-Target = 1 + 0.9 × 0.4 = 1.36
-Error  = 1.36 − 0.1 = 1.26
-New Q  = 0.1 + 0.2 × 1.26 = 0.352
-```
-
-The next time the agent encounters a similar state, this move is evaluated at 0.352 instead of 0.1.
-
-### Numerical example: red food collected
-
-Keep the same old and future Q values, but set the reward to −1:
+Eski Q değeri 0,1, ödül +1 ve yeni durumdaki en yüksek Q değeri 0,4 olsun.
 
 ```text
-Target = −1 + 0.9 × 0.4 = −0.64
-New Q  = 0.1 + 0.2 × (−0.64 − 0.1) = −0.048
+Hedef           = 1 + 0.9 × 0.4 = 1.36
+Zamansal fark   = 1.36 − 0.1 = 1.26
+Yeni Q          = 0.1 + 0.2 × 1.26 = 0.352
 ```
 
-This move becomes less desirable. After several similar experiences, the value of a decision that leads to red food can change further.
+Ajan aynı durum anahtarıyla yeniden karşılaştığında bu eylemin Q değeri 0,352 olur.
 
-### What changes when an episode ends?
+### Sayısal örnek — kırmızı yiyecek
 
-No reward follows the end of a completed episode, so we use `future = 0`. If the old Q value of the agent that collected the final green is 0.1:
+Eski Q ve gelecek Q değerleri aynı kalsın, ödül −1 olsun.
 
 ```text
-Target = 1
-New Q  = 0.1 + 0.2 × (1 − 0.1) = 0.28
+Hedef   = −1 + 0.9 × 0.4 = −0.64
+Yeni Q  = 0.1 + 0.2 × (−0.64 − 0.1) = −0.048
 ```
 
-The episode ends when the last green is collected or when 4,000 full turns have passed. Every pending move is updated using its own immediate reward and a future Q value of zero. For example, if another agent collected the last green and a pending move's reward was 0, that move's target is also zero.
+Eylemin Q değeri düşer. Benzer deneyimler tekrarlandıkça kırmızı yiyeceğe götüren eylemin değeri yeniden değişebilir.
 
-### The code
+### Bölüm bitince ne değişir?
 
-`LearningMemory.learn()`:
+Bölüm sonunda daha sonra alınacak ödül kalmadığı için `future = 0` kullanılır. Son yeşili toplayan ajanın seçtiği eylemin eski Q değeri 0,1 ise güncelleme şöyle olur.
+
+```text
+Hedef   = 1
+Yeni Q  = 0.1 + 0.2 × (1 − 0.1) = 0.28
+```
+
+Bölüm son yeşil toplandığında veya 4.000 tam tur tamamlandığında biter. Güncellenmeyi bekleyen her adım için kendi anlık ödülü ve sıfır gelecek Q değeri kullanılır. Örneğin başka bir ajan son yeşili topladığında bekleyen bir adımın ödülü 0 ise o adımın hedefi de 0 olur.
+
+### Kodda Q güncellemesi
+
+Güncellemeyi `LearningMemory.learn()` yapar.
 
 ```python
 old = values[action]
@@ -448,242 +434,246 @@ values[action] += ALPHA * (target - old)
 self.visits[key][action] += 1
 ```
 
-The interface shows the old Q, reward, future Q, target, and new Q values calculated in the latest call to this function. The visit count increases by 1 only for the updated state-action pair.
+Arayüz, son adımda yapılan güncellemelerde hesaplanan eski Q, ödül, gelecek Q, hedef ve yeni Q değerlerini gösterir. Yalnızca güncellenen durum-eylem çiftinin ziyaret sayısı 1 artar.
 
-### Why tabular Q-learning?
+### Neden tablo tabanlı Q-öğrenmesi?
 
-Each agent has five discrete actions and a small summary of its observation. We can store five numbers for each state. This makes it possible to inspect how one move changes Q values in the interface and JSON file. The algorithm learns from observed transitions without modeling opponents' decision rules or the probabilities of board transitions.
+Her ajanın beş ayrık eylemi ve özetlenmiş bir gözlemi vardır. Dolayısıyla her durum için beş sayı saklamak yeterlidir. Bir adımın Q değerlerini nasıl değiştirdiği arayüzden ve JSON dosyasından izlenebilir. Algoritma doğrudan gözlenen geçişlerden öğrenir. Rakiplerin karar kuralları ve tahtadaki geçiş olasılıkları için ayrı bir model kurmaya gerek kalmaz.
 
-| Method | Assessment for this project |
+| Yöntem | Bu proje açısından değerlendirme |
 |---|---|
-| Fixed heuristic that moves toward the nearest green | Easy to implement and provides a comparison point for training. It does not accumulate experience or change later decisions. |
-| SARSA | Uses a similar Q table. Its target contains the Q value of the action actually selected next. We chose Q-learning because we want to learn the value of the best estimated action while exploratory moves are being made. |
-| Monte Carlo learning | Can update a move's value using the total reward observed after an episode ends. Episodes can last up to 4,000 turns, so we chose to update when the same agent next makes a decision. |
-| Deep Q-Network (DQN) | Estimates values with a neural network instead of a table. It could be considered for raw boards or larger observations. The current state summary fits in a table, where each update can be inspected directly. |
+| En yakın yeşile yönelen sabit sezgisel kural | Uygulaması kolaydır ve karşılaştırma için başlangıç noktası sağlar. Ajan her kararda aynı kuralı uygular. |
+| SARSA | Benzer bir Q tablosu kullanır. Hedef hesabına, bir sonraki adımda gerçekten seçilen eylemin Q değeri girer. Bu projede Q-öğrenmesi, keşif sürerken tahmini en iyi eylemin değerini öğrenmek için seçildi. |
+| Monte Carlo öğrenmesi | Bir adımın değeri, bölüm bittiğinde gözlenen toplam ödülle güncellenebilir. Bölümler 4.000 tura kadar sürebildiği için bu projede güncelleme, aynı ajanın bir sonraki kararında yapılır. |
+| Derin Q Ağı (DQN) | Değerleri bir sinir ağıyla tahmin eder. Ham tahta verileri veya daha geniş gözlemler için değerlendirilebilir. Mevcut durum özeti, her güncellemenin doğrudan incelenebildiği bir tabloya sığar. |
 
-Because the full board and other agents' decisions do not fit in the state key, the same observation can lead to different results. We therefore measure training by comparing performance on new boards with an untrained initial policy.
+Tahtanın tamamı ile diğer ajanların kararları durum anahtarına sığmadığı için aynı gözlem farklı sonuçlar verebilir. Bu nedenle öğrenmeyi değerlendirirken yeni tahtalardaki performans, eğitim öncesindeki başlangıç politikasıyla karşılaştırılır.
 
-## 18. Move, turn, and episode flow
+## 18. Adım, tur ve bölüm akışı
 
-A **decision** is one agent choosing an action and receiving its result. A **turn** covers all three agents using their consecutive decisions in order. An **episode** starts with a fresh board and ends when the green food runs out or 4,000 full turns pass.
+Bir **adım**, ajanın bir eylem seçip sonucunu almasıdır. Her hareket adımında en fazla bir hücre ilerlenir. Bir **tur**, üç ajanın sırayla kendi adım haklarını kullanmasıyla tamamlanır. Bir **bölüm** yeni bir tahtayla başlar ve son yeşil yiyecek toplandığında veya 4.000 tam tur tamamlandığında biter.
 
-`Simulation.step()` executes one decision. The interface can show each step separately.
+`Simulation.step()` tek bir adımı yürütür. Arayüz her adımı ayrı ayrı gösterebilir.
 
-1. Prepare an observation and state values for the active agent, including its remaining decisions.
-2. If that agent has a pending previous move, update it using the Q values from this observation.
-3. The agent selects a new action using its Q values and ε. `move()` applies the action and returns the individual reward. The decision uses one slot and is held for learning.
-4. End the episode if no green food remains, or if agent 3's final decision completes 4,000 full turns. Update every pending move with a future Q value of zero, save the result, and start a new board with agent 1.
-5. If the episode continues, the same agent acts while it has decisions remaining. When its allowance is spent, the next agent takes over.
+1. Sıradaki ajan için güncel gözlemi ve Q değerlerini hazırla. Durum anahtarına kalan adım sayısını da ekle.
+2. Ajanın güncellenmeyi bekleyen bir önceki adımı varsa bu gözlemdeki Q değerlerini kullanarak güncelle.
+3. Ajan, Q değerlerini ve ε'yı kullanarak yeni bir eylem seçer. `move()` eylemi uygular ve ajanın ödülünü döndürür. Ajanın bir adım hakkı harcanır ve adım, sonraki Q güncellemesi için beklemeye alınır.
+4. Yeşil yiyecek kalmadıysa veya 3. ajanın son adımı 4.000. tam turu tamamladıysa bölümü bitir. Bekleyen bütün adımları gelecek Q değeri sıfır olacak şekilde güncelle, sonucu kaydet ve 1. ajanla yeni bir tahta başlat.
+5. Bölüm sürüyorsa ajan kalan adım haklarını kullanır. Adım hakkı bittiğinde sıradaki ajana geçilir.
 
-Each decision prepares a fresh observation. Agent 2 sees the board after agent 1 has used all its decisions. Agent 3 sees the board after both earlier agents have done so.
+Her adım için yeni bir gözlem hazırlanır. 2. ajan, tahtayı 1. ajan bütün adımlarını kullandıktan sonra görür. 3. ajan ise ilk iki ajanın adımları bittikten sonraki tahtayı görür.
 
-During an episode, `step_count` counts completed full turns. The result's `steps` field also counts the final partial turn in which the last green was collected. For example, an episode that ends on agent 2's move in its first turn is recorded as taking 1 turn.
+Bölüm sırasında `step_count` tamamlanan tam turları sayar. Sonuçtaki `steps` alanı, son yeşilin toplandığı kısmi turu da sayar. Örneğin ilk turda 2. ajanın adımında biten bir bölüm 1 tur olarak kaydedilir.
 
-### Follow two decisions by the same agent
+### Aynı ajanın art arda iki adımı
 
-Suppose agent 1 is at `(4, 5)`, has speed 2, and the final green is at `(5, 4)`. It can reach the food by choosing right and then up.
+1. ajanın `(4, 5)` konumunda olduğunu, hızının 2 ve son yeşil yiyeceğin `(5, 4)` konumunda olduğunu düşünelim. Ajan sağa, ardından yukarı giderek yiyeceğe ulaşabilir.
 
-- On the first decision, agent 1 moves right to `(5, 5)` and receives 0.
-- With one decision left, it observes the new board and updates the previous right move using the Q values for this state.
-- It chooses up, reaches `(5, 4)`, receives +1, and ends the episode.
-- The terminal update for up uses a future Q value of zero. If up started at 0.05, its new Q value is `0.05 + 0.2 × (1 − 0.05) = 0.24`.
-- The episode result is added to history and the next board starts with agent 1.
+- İlk adımda sağa gidip `(5, 5)` konumuna gelir ve 0 ödül alır.
+- Bir adım hakkı daha vardır. Güncel tahtayı gözlemler ve sağa gittiği adımı bu durumun Q değerleriyle günceller.
+- Yukarı gider, `(5, 4)` konumundaki yeşili toplar ve +1 ödül alır. Bölüm sona erer.
+- Son adımın güncellemesinde gelecek Q değeri sıfırdır. Yukarı eyleminin başlangıç Q değeri 0,05 ise yeni değeri `0,05 + 0,2 × (1 − 0,05) = 0,24` olur.
+- Bölüm sonucu geçmişe eklenir ve yeni tahta 1. ajanla başlar.
 
-Starting a new episode does not reset the Q table. **The board changes; learned experience remains.**
+Yeni bölüme başlarken mevcut Q tablosu kullanılır.
 
-## 19. How is learning saved to JSON?
+## 19. Öğrenme verileri JSON'a nasıl kaydedilir?
 
-**JSON** is a common text format for storing dictionaries and lists. Python objects disappear when the application closes; writing them to a file lets us restore them on the next run.
+**JSON**, sözlükleri ve listeleri saklamak için kullanılan yaygın bir metin biçimidir. Uygulama kapanınca bellekteki Python nesneleri silinir. Bunları bir dosyaya yazarak sonraki çalıştırmada geri yükleyebiliriz.
 
-`LearningMemory.save()` stores:
+`LearningMemory.save()` aşağıdaki alanları kaydeder.
 
-| Field | Contents |
+| Alan | İçerik |
 |---|---|
-| `version` | File format version |
-| `episodes` | Number of completed episodes |
-| `q_values` | State-action values for the agents |
-| `visits` | State-action update counts |
-| `history` | Parameters and results for all completed episodes |
+| `version` | Dosya biçiminin sürümü |
+| `episodes` | Tamamlanan bölüm sayısı |
+| `q_values` | Ajanların durum-eylem değerleri |
+| `visits` | Her durum-eylem çifti için güncelleme sayısı |
+| `history` | Tamamlanan bölümlerin ayarları ve sonuçları |
 
-A history row contains the date, episode number, food count per color, starting seed, selected distance metric, α/γ/ε values, number of turns, total green/red/reward, and each agent's individual speed and score. History stores only results marked with `turn_order: "sequential"`. Q values, visit counts, and the total learning counter that determines the exploration rate are retained independently of the number of history records.
+Geçmişteki her satırda tarih, bölüm numarası, renk başına yiyecek sayısı, başlangıçtaki rastgelelik tohumu (`seed`), son turun uzaklık ölçütü (`metric`), α/γ/ε değerleri, tur sayısı, toplanan yeşil ve kırmızı yiyeceklerin sayısı, toplam ödül ve her ajanın hızı ile puanı yer alır. Geçmişe yalnızca `turn_order: "sequential"` işaretli sonuçlar alınır. Q değerleri, güncelleme sayıları ve keşif oranını belirleyen toplam bölüm sayacı, geçmişteki kayıt sayısından bağımsız olarak saklanır.
 
-The `ACTIONS` order determines which action each Q-list index represents. The `/api/memory` view also returns action names and the current coefficients.
+Q değeri listesindeki her sıranın hangi eyleme karşılık geldiğini `ACTIONS` belirler. `/api/memory` yanıtı, eylem adlarını ve güncel katsayıları da içerir.
 
-### Why not save the entire board at every step?
+### Her adımda tahta kaydediliyor mu?
 
-Current Q values and visit counts are enough to continue learning. Saving all positions at every step would create much more data. Therefore:
+Öğrenmeye devam etmek için güncel Q değerleri ve güncelleme sayıları yeterlidir. Her adımda bütün konumları kaydetmek dosya boyutunu artırır. Uygulama şu verileri tutar.
 
-- The Q table is updated in memory when a transition for an agent's previous move is completed.
-- The interface shows updates from the latest step.
-- Results for all completed episodes are stored in history.
-- Previous Q values and board snapshots for every step are not archived separately.
+- Ajanın önceki adımına ait durum geçişi tamamlandığında bellekteki Q tablosu güncellenir.
+- Arayüzde son adımda yapılan güncellemeler gösterilir.
+- Tamamlanan bütün bölümlerin sonuçları geçmişe eklenir.
+- Her adıma ait eski Q değerleri ve tahta görüntüleri ayrı ayrı arşivlenmez.
 
-### How do we prevent a partial file write?
+### Dosyanın yarım yazılması nasıl önlenir?
 
-The application writes `learning_memory_v4.json.tmp` before replacing the main file.
+Uygulama önce `learning_memory_v5.json.tmp` dosyasına yazar, ardından geçici dosyayı asıl dosyanın yerine koyar.
 
 ```python
 temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 temporary.replace(path)
 ```
 
-`indent=2` makes the file readable with lines and indentation. `ensure_ascii=False` keeps characters readable. Using a temporary file reduces the risk that the main file will be left partially written.
+`indent=2` satır ve girintilerle dosyanın okunmasını kolaylaştırır. `ensure_ascii=False` Unicode karakterlerini, örneğin Türkçe harfleri, doğrudan okunabilir biçimde saklar. Önce geçici dosyaya yazmak, asıl dosyanın yarım kalma riskini azaltır.
 
-Data is saved at the end of an episode, when paused, when the new episode button is used, and when exiting with Ctrl+C. If the process is forcibly stopped, updates since the last save may be lost. This is a consequence of not writing to disk at every step.
+Veriler bölüm sonunda, simülasyon duraklatıldığında, yeni bölüm düğmesine basıldığında ve Ctrl+C ile çıkıldığında kaydedilir. Uygulama zorla kapatılırsa son kayıttan sonraki güncellemeler kaybolabilir.
 
-`LearningMemory.load()` reads the file if it exists; otherwise, it starts with empty memory. During loading, history records that are not from sequential runs are filtered out, and the cleaned data is saved. If the file is corrupted or its version is unsupported, loading raises an error instead of silently resetting learning.
+`LearningMemory.load()` dosya varsa verileri okur, dosya yoksa boş bir bellekle başlar. Yükleme sırasında sıralı çalıştırmalara ait olmayan geçmiş kayıtları ayıklanır ve temizlenen veri kaydedilir. Dosya bozuksa veya sürümü desteklenmiyorsa yükleme hata verir.
 
-The expanded state key includes the remaining decisions and is stored in `learning_memory_v4.json`. When this file is absent, training begins with an empty Q table and episode history. Earlier fixed-direction runs used `learning_memory_v3.json`. When the application restarts or the user manually starts a new episode, the simulation creates a fresh board using the saved Q values and clears pending decisions.
+Turun uzaklık ölçütünü ve kalan adım sayısını içeren durum anahtarları `learning_memory_v5.json` dosyasında saklanır. Bu dosya yoksa eğitim boş bir Q tablosu ve bölüm geçmişiyle başlar. Ölçütün bölüm başında bir kez seçildiği önceki sürüm `learning_memory_v4.json`, sabit yönlü hareketin kullanıldığı daha eski sürüm ise `learning_memory_v3.json` dosyasına kaydeder. Uygulama yeniden açıldığında veya kullanıcı yeni bölüm başlattığında, simülasyon kayıtlı Q değerleriyle yeni bir tahta oluşturur ve güncellenmeyi bekleyen adımları temizler.
 
-### How to interpret the seed correctly
+### Rastgelelik tohumu nasıl yorumlanır?
 
-A seed is the **starting** value for a random number generator. If automatic episodes run one after another in a single `Simulation` instance, the generator continues from where it left off. Therefore, seeing the same starting seed in the history does not mean automatic episodes used the same board.
+Rastgelelik tohumu (`seed`), rastgele sayı üretecinin başlangıç değeridir. Otomatik bölümler tek bir `Simulation` örneğinde art arda çalıştığında üreteç kaldığı yerden devam eder. Geçmişte aynı tohumla etiketlenen otomatik bölümler farklı tahtalar kullanabilir.
 
-For a controlled comparison, create a new `Simulation` with the same seed for each episode to reproduce the same starting board, speeds, and metric. The learning memory can be kept separate and shared across episodes. In the application's default random startup, the seed field is `null`, which HTML displays as “Random.”
+Kontrollü bir karşılaştırmada aynı başlangıç tahtasını, hızları ve ilk turun ölçütünü yeniden oluşturmak için her bölümde aynı tohumla yeni bir `Simulation` örneği oluşturulur. Sonraki seçimleri yeniden üretmek için rastgele sayı üretecini kullanan işlemlerin sırası da eşleşmelidir. Öğrenme belleği ayrı tutulabilir ve bölümler arasında paylaşılabilir. Varsayılan rastgele başlangıçta tohum alanı `null` değerini alır ve arayüzde **Rastgele** görünür.
 
-## 20. How do Python and HTML communicate?
+## 20. Python ile HTML nasıl haberleşir?
 
-A browser cannot call a Python function directly. `app.py` starts a small **HTTP server** at `127.0.0.1`, which points to this computer. HTTP is the communication method a browser uses to send a request to an address and receive a response.
+Tarayıcı, Python işlevlerini HTTP istekleri üzerinden kullanır. `app.py`, bu bilgisayarı gösteren `127.0.0.1` adresinde küçük bir **HTTP sunucusu** başlatır. Tarayıcı bir adrese istek gönderir ve sunucunun yanıtını alır.
 
-An **API** is a set of addresses and data rules that HTML can use:
+**API**, HTML sayfasının hangi adreslere hangi veri biçimiyle istek göndereceğini belirler.
 
-| Address | Method | Function |
+| Adres | Yöntem | İşlev |
 |---|---|---|
-| `/` | GET | Returns the HTML page |
-| `/api/state` | GET | Returns the current board and statistics |
-| `/api/tick` | POST | If running, executes 1–20 single-cell decisions in order |
-| `/api/control` | POST | Starts, pauses, or applies settings and creates a new episode |
-| `/api/memory` | GET | Returns current Q memory, visits, and history as JSON |
+| `/` | GET | HTML sayfasını döndürür |
+| `/api/state` | GET | Güncel tahtayı ve istatistikleri döndürür |
+| `/api/tick` | POST | Simülasyon çalışıyorsa sırayla 1–20 tek hücrelik adım yürütür |
+| `/api/control` | POST | Simülasyonu başlatır, duraklatır veya ayarları uygulayarak yeni bir bölüm oluşturur |
+| `/api/memory` | GET | Güncel Q belleğini, güncelleme sayılarını ve geçmişi JSON olarak döndürür |
 
-GET requests data; POST requests an operation here. For example, HTML sends:
+Bu projede GET veri almak, POST işlem başlatmak için kullanılır. Örneğin HTML sayfası yeni bölüm için şu veriyi gönderir.
 
 ```json
 {"action": "new_episode", "food_pairs": 40}
 ```
 
-`Handler.control()` in `app.py` validates this, saves the current learning data, changes the food count, and calls `new_episode()`. The response contains the new board.
+`app.py` içindeki `Handler.control()` isteği doğrular, güncel öğrenme verilerini kaydeder, yiyecek sayısını değiştirir ve `new_episode()` işlevini çağırır. Yanıt yeni tahtayı içerir.
 
-`integer()` checks integer values and bounds in one place. `12.5`, `true`, `"12"`, 0, and 376 are not accepted as food counts. The HTML number field prevents invalid input, and the server checks the same limits again because an API request can also come from outside the browser interface.
+`integer()` işlevi değerin tam sayı olup olmadığını ve sınırlar içinde kalıp kalmadığını denetler. `12.5`, `true`, `"12"`, `0` ve `376` yiyecek sayısı olarak kabul edilmez. HTML'deki sayı alanı girişleri doğrular. API'ye tarayıcı arayüzü dışından da istek gönderilebildiği için sunucu aynı sınırları denetler.
 
-`main()` is the application entry point: it reads command-line settings, loads the JSON memory, creates the simulation and server, and opens the browser. On Ctrl+C, it saves memory and closes the server.
+Uygulama `main()` işlevinden başlar. Bu işlev komut satırı ayarlarını okur, JSON belleğini yükler, simülasyonu ve sunucuyu oluşturur, ardından tarayıcıyı açar. Ctrl+C ile çıkıldığında belleği kaydeder ve sunucuyu kapatır.
 
-## 21. What does each part of the HTML code do?
+## 21. HTML dosyasının bölümleri
 
-`index.html` has three parts:
+`index.html` dosyası üç bölümden oluşur.
 
-- **HTML:** The structure of buttons, fields, tables, and the drawing area.
-- **CSS:** Colors, sizes, columns, and support for narrow screens.
-- **JavaScript:** Server communication, drawing, and updating values on screen.
+- **HTML** düğmelerin, giriş alanlarının, tabloların ve çizim alanının yapısını tanımlar.
+- **CSS** renkleri, boyutları, sütunları ve dar ekranlardaki yerleşimi belirler.
+- **JavaScript** sunucuyla haberleşir, tahtayı çizer ve ekrandaki değerleri günceller.
 
 ### `request()`
 
-Sends an HTTP request with `fetch()` and reads the response as JSON. If the server reports an error, it creates an error to show to the user.
+`fetch()` ile HTTP isteği gönderir ve yanıtı JSON olarak okur. Sunucu hata bildirirse kullanıcıya gösterilecek hata iletisini hazırlar.
 
 ### `update()`
 
-Adds requests to a Promise chain. A **Promise** represents the result of an operation that will finish later. We use the chain to prevent starting the next request before the current response has been processed.
+İstekleri bir **Promise** zincirine ekler. Promise, daha sonra sonuçlanacak bir işlemi temsil eder. Zincir, bir isteğin yanıtı işlendikten sonra sıradaki isteği başlatır.
 
-This order matters: the response to an old step request must not arrive after a new episode request and redraw the old board. Refresh and control requests share the same queue.
+Yenileme ve kontrol istekleri aynı sırayı paylaşır. Bu sıra, yeni bir bölüm oluşturulduktan sonra eski bir adım yanıtının önceki tahtayı yeniden çizmesini önler.
 
 ### `control()`
 
-Temporarily disables buttons while a control request is running, then enables them again when it finishes. A new-episode request sends the draft food count from the input field.
+Kontrol isteği sürerken düğmeleri geçici olarak devre dışı bırakır. İstek tamamlanınca düğmeleri yeniden etkinleştirir. Yeni bölüm isteğinde, giriş alanındaki yiyecek sayısı gönderilir.
 
 ### `render()`
 
-Converts scores and board state from the server into text and a table. It displays completed turns, the next agent and its step number, and the old and new Q values for the latest update.
+Sunucudan gelen puanları ve tahta durumunu ekrandaki metne ve tabloya dönüştürür. Tamamlanan tur sayısını, **Turun uzaklık ölçütü** bilgisini, sıradaki ajanı, adım numarasını ve son adımda yapılan güncellemelerin eski ve yeni Q değerlerini gösterir.
 
-The training history is rebuilt when a result is added. Each row contains parameters and the individual reward and speed for all three agents. The **Ending turn** column immediately beside the episode number shows the result's `steps` field; this includes the final partial turn. Total score is the sum of all agents' rewards.
+Yeni bir bölüm sonucu kaydedildiğinde eğitim geçmişi tablosu yeniden oluşturulur. Her satırda bölüm ayarları ve üç ajanın ayrı ayrı ödül ve hız bilgileri yer alır. Bölüm numarasının yanındaki **Bitiş turu** sütunu, son kısmi turu da sayan `steps` alanını gösterir. **Son turun ölçütü**, bölümün son ölçütünü verir. Toplam puan, tüm ajanların ödüllerinin toplamıdır.
 
-If there are at least 20 completed episodes with the same food count and sequential order, the average total reward of the first and last 10 episodes is shown. This uses records whose food count matches the current setting and whose `turn_order` field is `sequential`. This small summary is not a substitute for a controlled scientific experiment.
+Güncel yiyecek sayısıyla eşleşen, `turn_order` değeri `sequential` olan en az 20 tamamlanmış bölüm varsa ilk ve son 10 bölümün ortalama toplam ödülü gösterilir. Bu özet eğitim geçmişini izlemeye yarar. Kontrollü karşılaştırma için başlangıç koşullarının ayrıca eşleştirilmesi gerekir.
 
-### `draw()` and Canvas
+### `draw()` ve Canvas
 
-**Canvas** is an HTML area where we draw with JavaScript. Its internal resolution is 600 × 600. Since the board is 50 × 50, each cell is `600 / 50 = 12` pixels wide.
+**Canvas**, JavaScript ile çizim yapılabilen bir HTML alanıdır. Çizim çözünürlüğü 600 × 600 pikseldir. Tahta 50 × 50 olduğundan her hücre `600 / 50 = 12` piksel genişliğindedir.
 
-We find the center of a cell with:
+Hücrenin merkez koordinatları şöyle hesaplanır.
 
 ```javascript
 const x = (agent.x + 0.5) * cell;
 const y = (agent.y + 0.5) * cell;
 ```
 
-`0.5` moves the point from the cell's upper-left corner to its center. Green food is drawn as circles, red food as squares, and agents as numbered colored circles. Dashed lines show the single nearest-opponent coordinate received from Python.
+`0.5` değeri, hesabı hücrenin sol üst köşesinden merkezine kaydırır. Yeşil yiyecekler daireyle, kırmızı yiyecekler kareyle, ajanlar numaralı ve renkli dairelerle çizilir. Kesikli çizgi, Python'dan gelen en yakın rakip konumunu gösterir.
 
-### Training speed and agent speed are different
+### Eğitim hızı ve ajan hızı
 
-The browser attempts to refresh about every 100 milliseconds. The slider controls the number of single-cell decisions per request. At 1, the browser shows each decision. At higher values up to 20, it shows the board after the last decision in the batch. The simulation checks for remaining green food after every decision. The browser waits for the current request to finish before sending another.
+Tarayıcı yaklaşık 100 milisaniyede bir tahtayı yenilemeye çalışır. Kaydırma çubuğu, her istekte kaç tek hücrelik adım yürütüleceğini belirler. Değer 1 iken her adım, daha yüksek değerlerde 20 adıma kadar grubun sonundaki tahta gösterilir. Simülasyon her adımın ardından yeşil yiyecek kalıp kalmadığını kontrol eder. Tarayıcı yeni bir istek göndermeden önce mevcut isteğin tamamlanmasını bekler.
 
-Agent speed is the number of consecutive decisions it gets each turn. The slider only changes how often those decisions are drawn. Training speed depends on computation time and the browser timer. Closing the browser tab stops requests to advance the simulation.
+Ajanın hızı, sıra kendisine geldiğinde art arda kaç adım hakkı olduğunu belirler. Eğitimin ilerleme hızı hesaplama süresine ve tarayıcının zamanlayıcısına bağlıdır. Tarayıcı sekmesi kapatıldığında simülasyonu ilerleten istekler durur.
 
-## 22. How do we evaluate learning performance?
+## 22. Öğrenme başarısı nasıl ölçülür?
 
-**What is it?** Evaluation examines agent behavior using measurable results. Growth in the Q table or the number of updates alone does not show that a better policy has been learned.
+Değerlendirme, ajanların davranışını ölçülebilir sonuçlar üzerinden inceler. Q tablosunun büyümesi veya güncellemelerin artması, ölçülen performansla birlikte yorumlanır.
 
-**What does it do?** It helps us understand which behaviors changed between episodes and how those changes affected rewards. Because agents compete over shared food, we should examine both total and individual scores.
+Ölçümler bölümler arasında hangi davranışların değiştiğini ve bu değişikliklerin ödülleri nasıl etkilediğini gösterir. Ajanlar ortak yiyecekler için yarıştığından toplam puanla birlikte her ajanın puanını incelemek gerekir.
 
-**How is it used in this project?** The interface shows completed episode results in a history table. The comparison uses these measures:
+Arayüz, tamamlanan bölümlerin sonuçlarını geçmiş tablosunda gösterir. Karşılaştırmada şu ölçümler kullanılır.
 
-| Measure | Interpretation |
+| Ölçüm | Yorum |
 |---|---|
-| Green collected | Shows access to target food |
-| Red collected | Shows interaction with food agents should avoid |
-| Total reward | Combined result of collecting green and red food |
-| Turns used | Shows how long it took to reach the result, in turns |
-| Individual agent rewards | Shows how competition affected each agent |
-| All green collected | Shows whether the episode reached its goal |
+| Toplanan yeşil yiyecek | Ajanların hedef yiyeceklere ne ölçüde ulaştığını gösterir |
+| Toplanan kırmızı yiyecek | Ajanların kaçınması gereken yiyeceklerle temasını gösterir |
+| Toplam ödül | Yeşil ve kırmızı yiyeceklerden gelen ödüllerin toplamıdır |
+| Tur sayısı | Sonuca kaç turda ulaşıldığını gösterir |
+| Ajan başına ödül | Rekabetin her bir ajanı nasıl etkilediğini gösterir |
+| Tüm yeşillerin toplanması | Bölümün hedefine ulaşıp ulaşmadığını gösterir |
 
-If there are at least 20 completed episodes with the same food count and sequential order, the average total reward of the first and last 10 episodes is compared. Episodes with different food counts are not included in the same comparison. The history contains only sequential-run results.
+Sıralı hareketle ve aynı yiyecek sayısıyla tamamlanan en az 20 bölüm varsa ilk ve son 10 bölümün ortalama toplam ödülü karşılaştırılır. Karşılaştırmada bölümler yiyecek sayısına göre gruplanır. Geçmiş yalnızca sıralı çalıştırmaların sonuçlarını içerir.
 
-Random placement, speeds, and the decreasing exploration rate also affect results. The history shows progress over a run under those conditions.
+Rastgele yerleşim, ajan hızları, tur başına seçilen uzaklık ölçütü ve zamanla azalan keşif oranı da sonuçları etkiler. Geçmiş tablosu bu koşullardaki ilerlemeyi gösterir.
 
-### Historical results with fixed-direction moves
+### Önceki bölüm başına sabit ölçüt denemesi
 
-In one run with the former fixed-direction movement, 40 items of each color, and a starting seed of 42, average net reward rose from 29.8 in the first 10 episodes to 36.6 in episodes 51–60. Average red items collected fell from 10.2 to 3.4, and all 40 green items were collected in every episode of both groups.
+Bu denemede ajanlar ayrı tek hücrelik adımlar kullandı ve en yakın rakibi belirleyen ölçüt her bölüm boyunca sabit kaldı. Hedef seçimi ve ilerleme hesabı Manhattan uzaklığıyla yapıldı. Her renkten 125 yiyecekle, boş Q tablosundan ve `seed=42` ayarından başlayarak 10 bölüm art arda çalıştırıldı. On bölümün tamamında bütün yeşiller toplandı. Bölüm başına ortalama 23,7 kırmızı yiyecek toplandı, net ödül 101,3 ve tur sayısı 189,6 oldu. Bu sonuçlar tek bir rastgele sayı dizisindeki çalıştırmayı özetler.
 
-A separate controlled trial also used fixed-direction movement, plus an earlier target rule and stronger starting Q values. We trained on boards with 40 food items of each color. Training episode seeds were 0–59 and test-board seeds were 100–111. Each policy was evaluated from the same starting boards with fixed Q values and 5% exploration. The untrained policy used the previous green bonus and red penalty in its initial Q values.
+### Önceki sabit yönlü hareket deneylerinin sonuçları
 
-| Prior training episodes | Average green | Average red | Average net reward | Average turns | Boards where all green was collected |
+Önceki sabit yönlü hareket kuralıyla, her renkten 40 yiyecek ve 42 başlangıç tohumu kullanılarak yapılan bir çalıştırmada ortalama net ödül, ilk 10 bölümde 29,8 iken 51–60. bölümlerde 36,6'ya yükseldi. Toplanan ortalama kırmızı yiyecek sayısı 10,2'den 3,4'e düştü. Her iki gruptaki bütün bölümlerde 40 yeşil yiyeceğin tamamı toplandı.
+
+Ayrı bir kontrollü deneyde de sabit yönlü hareket kullanıldı. Bu deneyde daha eski bir hedef seçme kuralı ve daha güçlü başlangıç Q değerleri uygulandı. Eğitim, her renkten 40 yiyecek bulunan tahtalarda yapıldı. Eğitim bölümlerinde 0–59, test tahtalarında 100–111 tohumları kullanıldı. Her politika aynı başlangıç tahtalarında, Q değerleri sabit tutularak ve %5 keşif oranıyla değerlendirildi. Eğitim almamış politikanın başlangıç Q değerlerinde önceki yeşil bonusu ve kırmızı cezası vardı.
+
+| Önceki eğitim bölümü sayısı | Ortalama yeşil | Ortalama kırmızı | Ortalama net ödül | Ortalama tur | Tüm yeşillerin toplandığı tahta |
 |---:|---:|---:|---:|---:|---:|
-| 0 | 36.25 | 1.92 | 34.33 | 1,171.58 | 9/12 |
-| 20 | 39.67 | 2.75 | 36.92 | 650.00 | 11/12 |
-| 60 | 40.00 | 1.67 | 38.33 | 678.00 | 12/12 |
+| 0 | 36,25 | 1,92 | 34,33 | 1.171,58 | 9/12 |
+| 20 | 39,67 | 2,75 | 36,92 | 650,00 | 11/12 |
+| 60 | 40,00 | 1,67 | 38,33 | 678,00 | 12/12 |
 
-In this test, 60 episodes of training increased average net reward by 4 points and collected all green food on all 12 boards. The 20-episode policy took less time on average and collected more red food. These results apply to the earlier movement and learning setup, this food density, and these 12 boards.
+Bu deneyde 60 bölümlük eğitim ortalama net ödülü 4 puan artırdı ve 12 tahtanın tamamında tüm yeşiller toplandı. 20 bölüm eğitim alan politika ortalama daha az tur kullandı ve daha fazla kırmızı topladı. Bu bulgular, önceki hareket ve öğrenme düzeni, bu yiyecek yoğunluğu ve kullanılan 12 tahta için geçerlidir.
 
-## 23. Limitations and design decisions
+## 23. Sınırlamalar ve tasarım kararları
 
-- Q-learning is the only learning method; there is no route-planning comparison or neural network.
-- α and γ are fixed. ε decreases with the episode count. We do not add dozens of user settings.
-- Food is distributed randomly; the agents do not assume a hidden placement pattern.
-- The state table does not include the entire board; we accept some information loss to keep memory small.
-- Euclidean distance is used only to measure the nearest opponent; diagonal movement is never allowed.
-- The 4,000-turn limit is an implementation decision that prevents an episode from continuing forever; it is not specified by the assignment.
-- A decision moves at most one cell. Attempting to cross a board edge uses a decision and leaves the agent in place. Red food is collected on contact and gives a −1 reward.
-- Agents are allowed to occupy the same cell. The assignment only specifies the outcome of food competition.
-- The fixed 1 → 2 → 3 order can give the agent that moves first an advantage when several agents can reach the same food.
-- Memory persists, but the exact board state is not saved. The application creates a new board when restarted.
+- Ajanlar tablo tabanlı Q-öğrenmesi kullanır. Bu sürümde rota planlama yöntemleriyle karşılaştırma veya sinir ağı deneyi yapılmadı.
+- α ve γ sabittir. ε, tamamlanan bölüm sayısı arttıkça düşer. Kullanıcı arayüzü temel simülasyon ayarlarını sunar.
+- Yiyecekler rastgele dağıtılır. Ajanlar bir yerleşim örüntüsü varsaymadan karar verir.
+- Durum anahtarı tahtayı özetler. Bu özet bellek kullanımını azaltırken bazı bilgileri dışarıda bırakır.
+- Tur için seçilen ölçüt uzaklık hesaplarını belirler. Hareketler dört ana yönle sınırlıdır.
+- 4.000 turluk sınır, bir bölümün süresiz devam etmesini önlemek için uygulamada belirlenmiştir.
+- Ajan bir adımda en fazla bir hücre ilerleyebilir. Tahta dışına çıkmaya çalışırsa yerinde kalır ve bir adım hakkı kullanır. Kırmızı yiyecek temas edildiğinde toplanır ve −1 ödül verir.
+- Birden fazla ajan aynı hücrede bulunabilir. Ödev metni, yiyecek için yarışan ajanlar arasındaki önceliğe ilişkin bir kural verir.
+- Birden fazla ajan aynı yiyeceğe ulaşabiliyorsa sabit 1 → 2 → 3 sırası, önce hareket eden ajana avantaj sağlayabilir.
+- Öğrenme belleği dosyaya kaydedilir. Uygulama her yeniden başlatmada yeni bir tahta oluşturur.
 
-## 24. Component flow and presentation summary
+## 24. Bileşenlerin akışı ve sunum özeti
 
-`ACTIONS`, `DELTAS`, `Agent`, and `Observation` in `simulation.py` form the basis of the environment. `new_episode()` creates the board; `observation_for()` prepares an observation; `project()` calculates a candidate move; and `move()` applies the real move. `state_values()`, `choose_action()`, and `LearningMemory.learn()` form the learning sequence. `step()` combines these pieces into the sequential move flow.
+`simulation.py` içindeki `ACTIONS`, `DELTAS`, `Agent` ve `Observation` ortamın temelini oluşturur. `new_episode()` tahtayı oluşturur. `observation_for()` gözlemi hazırlar, `project()` olası bir hareketi hesaplar ve `move()` seçilen eylemi uygular. `state_values()`, `choose_action()` ve `LearningMemory.learn()` öğrenme akışını oluşturur. `step()` bu parçaları sıralı hareket akışında birleştirir.
 
-`main()` and `make_handler()` in `app.py` prepare the server; `state()`, `do_POST()`, and `control()` connect the interface to the simulation. In `index.html`, `request()`, `update()`, `control()`, `render()`, and `draw()` handle communication, user controls, and drawing.
+`app.py` içinde `main()` ve `make_handler()` sunucuyu hazırlar. `state()`, `do_POST()` ve `control()` arayüzü simülasyona bağlar. `index.html` içindeki `request()`, `update()`, `control()`, `render()` ve `draw()` ise iletişimi, kullanıcı kontrollerini ve çizimi yürütür.
 
-You can follow the sequence from an on-screen button to a Q update:
+Arayüzdeki bir düğmeden başlayıp Q güncellemesine uzanan akış şu şekildedir.
 
 ```text
-HTML button / timer
-    → HTTP request
-    → app.py validation
+HTML düğmesi veya zamanlayıcı
+    → HTTP isteği
+    → app.py isteği doğrular
     → Simulation.step()
-    → active agent observes the board → update Q for its previous move
-    → one action → individual reward → save decision for the next Q update
-    → check whether green food is gone / turn-limit check
-    → continue with this agent if it has decisions left, otherwise advance
-    → if episode ended, update pending moves, save history and JSON
-    → HTTP response
-    → update HTML text and redraw the board
+    → sıradaki ajan tahtayı gözlemler → önceki adımın Q değeri güncellenir
+    → bir eylem seçilir → ajanın ödülü hesaplanır → adım sonraki Q güncellemesi için tutulur
+    → yeşil kaldı mı ve tur sınırına ulaşıldı mı diye kontrol edilir
+    → adım hakkı varsa aynı ajanla, tükendiyse sıradaki ajanla devam edilir
+    → bölüm bittiyse bekleyen adımlar güncellenir ve geçmiş JSON dosyasına kaydedilir
+    → HTTP yanıtı
+    → arayüzdeki metin güncellenir ve tahta yeniden çizilir
 ```
 
-During the demo, watch a speed-2 or speed-3 agent make consecutive decisions. The Q panel shows the previous decision's reward and the future Q value calculated from the new observation. After the last decision of its turn, the agent uses its next observation after the other agents have acted. When the final green is collected, pending moves are updated with a future Q value of zero.
+Demoda hızı 2 veya 3 olan bir ajanın art arda kullandığı adımları izleyebilirsin. Q panelinde önceki adımın ödülü ve yeni gözlemden hesaplanan gelecek Q değeri gösterilir. Ajan turdaki son adımını kullandıysa sonraki gözlemini diğer ajanlar hareket ettikten sonra alır. Son yeşil toplandığında bekleyen adımlar, gelecek Q değeri sıfır alınarak güncellenir.
